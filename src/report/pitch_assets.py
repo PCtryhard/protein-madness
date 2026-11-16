@@ -157,6 +157,18 @@ def fill_pitch(pitch_path: Path, nums: dict) -> int:
             f"{MISSING} — database novelty was not run (see TODO.md)."),
         "provenance": f"All numbers regenerated from `results/leaderboard.csv` at git "
                       f"`{nums['git_sha']}` by `python -m src.report.pitch_assets`.",
+        "target_objective": (
+            f"> {nums['target']['objective']}\n\n"
+            f"Target: **{nums['target']['name']}** "
+            f"({nums['target']['n_catalytic']} catalytic residues, reference "
+            f"`{nums['target']['reference_structure']}`, config hash "
+            f"`{nums['target']['config_hash']}`).\n\n"
+            + ("Success metrics from the brief: "
+               + ", ".join(f"`{m}`" for m in nums["target"]["success_metrics"])
+               if nums["target"].get("success_metrics")
+               else f"Success metrics: {MISSING} — fill `success_metrics` in the target config.")
+            if nums.get("target") else
+            f"{MISSING} — pass --target configs/target.yaml to fill this section."),
     }
     n = 0
 
