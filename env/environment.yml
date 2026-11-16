@@ -1,0 +1,16 @@
+# conda/mamba environment for the core (CPU) pipeline.
+#   mamba env create -f env/environment.yml && mamba activate enzyme-hack
+# Python packages are pinned through pip so the conda and plain-venv routes
+# resolve to byte-identical versions (see env/requirements.txt).
+# mmseqs2 / foldseek are optional external binaries used by the novelty
+# metrics; they are not available for native Windows (use WSL or Euler).
+name: enzyme-hack
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python=3.12.10
+  - pip=26.3
+  - pip:
+      - -r requirements.txt

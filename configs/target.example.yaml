@@ -1,0 +1,38 @@
+# THE file that changes Saturday morning.
+#   cp configs/target.example.yaml configs/target.yaml   # edit, then:
+#   python -m src.io.validate_target configs/target.yaml
+#
+# All residue numbers are in the REFERENCE numbering (as in the PDB file / the
+# challenge brief). The pipeline maps them to sequence positions itself.
+# This example is the toy smoke-test enzyme (hen egg-white lysozyme, PDB 1AKI);
+# it says nothing about what the real challenge will be.
+
+name: toy_lysozyme
+reference_structure: data/toy/ref.pdb     # .pdb or .cif, path relative to repo root
+reference_sequence: data/toy/ref.fasta    # optional; cross-checked against the structure
+chain: A
+
+catalytic_residues:        # 1-indexed, in reference numbering
+  - {resi: 35, resn: GLU, role: general_acid}
+  - {resi: 52, resn: ASP, role: nucleophile}
+
+catalytic_geometry:        # 2 atoms = distance (A), 3 = angle (deg), 4 = dihedral (deg)
+  # ideal_distance below is the value MEASURED in 1AKI (7.05 A). Omit ideal_* to
+  # use whatever the reference structure has; set it when the challenge or the
+  # literature gives a mechanistically required value.
+  - {name: acid_nucleophile, atoms: ["35:OE1", "52:OD1"], ideal_distance: 7.05, tol: 1.5}
+  - {name: carboxylate_angle, atoms: ["35:CD", "35:OE1", "52:OD1"], tol: 20.0}
+
+substrate:
+  smiles: null             # needed by ligand-aware design and co-folding
+  reference_ligand: null   # residue name of the ligand in reference_structure, if present
+
+design_region:             # positions free to change
+  mode: shell              # all | explicit (positions: [...]) | shell
+  shell_radius: 8.0        # A, heavy-atom distance to any catalytic residue
+  exclude: [35, 52]        # never mutated (reference numbering)
+
+objective: >
+  one-paragraph plain-English statement of what the challenge asks for
+
+success_metrics: []        # fill from the challenge brief Saturday

@@ -1,0 +1,13 @@
+# Core (CPU) environment. Exact pins; resolved and tested on Python 3.12.10.
+# Everything the CPU smoke test needs is in this file and nothing else.
+# GPU model stacks are NOT here: each backend pins its own (env/modal_image.py,
+# env/euler_setup.sh) because their torch/CUDA builds differ.
+numpy==1.26.4
+pandas==3.0.6
+scipy==1.17.1
+biotite==1.8.0
+biopython==1.87
+matplotlib==3.11.2
+PyYAML==6.0.3
+pytest==9.2.0
+nbformat==5.11.1

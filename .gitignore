@@ -1,0 +1,39 @@
+# results are shared out-of-band (see ONBOARDING.md), never committed
+results/*
+!results/.gitkeep
+
+# model weights and databases never go in git (see MANIFEST.md)
+weights/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.npz
+*.a3m
+*.ffindex
+*.ffdata
+
+# the real target config is created Saturday; commit it deliberately with -f if wanted
+# (the example stays tracked)
+configs/target.local.yaml
+
+# python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+.ipynb_checkpoints/
+
+# cluster / job debris
+slurm-*.out
+*.sbatch.log
+.modal/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
