@@ -16,7 +16,7 @@ first.
 ## Quickstart
 
 ```bash
-git clone <this repo> && cd "Protein Madness"
+git clone https://github.com/PCtryhard/protein-madness.git && cd protein-madness
 python -m venv .venv && source .venv/Scripts/activate   # Windows; use .venv/bin/activate elsewhere
 pip install -r env/requirements.txt
 bash scripts/smoke_test.sh                               # ~1 min, CPU only, must print SMOKE TEST PASSED

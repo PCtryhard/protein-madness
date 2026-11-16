@@ -7,7 +7,7 @@ not you.
 ## 1. Clone and install (5 min)
 
 ```bash
-git clone <REMOTE> "Protein Madness" && cd "Protein Madness"
+git clone https://github.com/PCtryhard/protein-madness.git && cd protein-madness
 ```
 
 ```bash
