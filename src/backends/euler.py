@@ -115,7 +115,12 @@ class EulerBackend(Backend):
                  sbatch_extra: Sequence[str] = ()) -> None:
         self.compute = compute
         self.log_dir = Path(log_dir) if log_dir else DEFAULT_LOG_DIR
-        self.chdir = Path(chdir).resolve() if chdir else Path.cwd()
+        # No default: without --chdir, Slurm runs the job in the directory it was
+        # submitted from, which on a login node is the repo checkout. Defaulting to
+        # Path.cwd() bakes the RENDERING machine's path into the script, so a script
+        # written on a Windows laptop carried a C:/... --chdir that cannot exist on
+        # Euler. Pass chdir= explicitly only to override the submission directory.
+        self.chdir = Path(chdir) if chdir else None
         self.account = account or os.environ.get("SBATCH_ACCOUNT") or None
         self.setup_commands = list(DEFAULT_SETUP if setup_commands is None else setup_commands)
         self.job_name = job_name
@@ -165,7 +170,8 @@ class EulerBackend(Backend):
         if array_spec:
             d.append(f"#SBATCH --array={array_spec}")
         if self.chdir:
-            d.append(f"#SBATCH --chdir={self.chdir.as_posix()}")
+            # quoted: a repo path containing spaces otherwise truncates the directive
+            d.append(f'#SBATCH --chdir="{self.chdir.as_posix()}"')
         if self.account:
             d.append(f"#SBATCH --account={self.account}")
         d.extend(self.sbatch_extra)
@@ -242,7 +248,8 @@ class EulerBackend(Backend):
 
     def _submit(self, resources: Resources, command: Command | None = None,
                 commands: Sequence[str] | None = None) -> str:
-        sbatch = self._require_sbatch()
+        # Resource check FIRST, so a request that can never fit is caught on the
+        # laptop while writing the pipeline, not only once we are on a login node.
         if resources.gpus > 0:
             if self.compute is None:
                 raise BackendError(
@@ -253,6 +260,7 @@ class EulerBackend(Backend):
             ceiling = check_fits(resources, self.compute)
             log.info("euler: %.1f GB VRAM requested, ceiling %.1f GB",
                      resources.gpu_mem_gb, ceiling)
+        sbatch = self._require_sbatch()
 
         self.log_dir.mkdir(parents=True, exist_ok=True)
         stamp = f"{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}"

@@ -113,7 +113,8 @@ class LocalBackend(Backend):
         """Start pending tasks up to ``max_parallel``."""
         limit = 1 if lj.job.resources.array_size is None else self.max_parallel
         while lj.pending and len(lj.running) < limit and not lj.cancelled:
-            lj.running[lj.pending[0]] = self._spawn(lj.job, lj.pending.pop(0), command, shell)
+            index = lj.pending.pop(0)
+            lj.running[index] = self._spawn(lj.job, index, command, shell)
 
     def _spawn(self, job: Job, index: int | None, command, shell: bool) -> _Task:
         suffix = "" if index is None else f".{index}"
