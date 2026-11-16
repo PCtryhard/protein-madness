@@ -1,0 +1,104 @@
+# Backend choices, batch sizes and thresholds. Changes here change config
+# hashes and so invalidate stage caches, which is intended.
+#
+# Nothing in this file is target-specific: the enzyme lives in
+# configs/target.yaml. Keep it that way.
+
+defaults:
+  device: cpu
+  backend: local
+  seed: 0
+
+# Hard compute ceilings. Not assumptions buried in code: tools read these and
+# refuse rather than OOM at hour 20.
+compute:
+  # ETH Euler reserved nodes: RTX 2080Ti, sm_75, 11 GB VRAM, NO bf16.
+  max_vram_gb: 11.0
+  allow_bf16: false
+  precision: fp16            # fp32 | fp16
+  max_residues: 400          # refuse longer targets rather than OOM; raise deliberately
+  threads: 4
+
+tools:
+  # ---------------- generation ----------------
+  generate.mutate:
+    # CPU baseline: systematic mutational scan of the design region.
+    mode: single              # single | double | both
+    max_designs: 2000
+    # Which substitutions to try at each designable position.
+    # chemical_similar = conservative sets; all = all 19; list = explicit letters
+    substitutions: chemical_similar
+    include_wildtype: true    # keep the parent as a row, as the baseline
+    double_max_pairs: 200     # cap on position pairs for the double scan
+    exclude_cysteine: true    # do not introduce new unpaired cysteines
+
+  generate.proteinmpnn:
+    n_per_backbone: 8
+    temperature: 0.1
+    backbone_noise: 0.0
+
+  generate.ligandmpnn:
+    n_per_backbone: 8
+    temperature: 0.1
+    checkpoint: ligandmpnn_v_32_010_25
+
+  generate.rfdiffusion:
+    n_designs: 8
+    contigs: null             # set from the challenge; e.g. "10-40/A35-35/10-40"
+    hold_motif: true
+    diffuser_T: 50
+
+  # ---------------- folding ----------------
+  fold.esmfold:
+    chunk_size: 64            # attention chunking: required to fit 11 GB
+    num_recycles: 1
+    batch_size: 1
+  fold.boltz:
+    recycling_steps: 3
+    diffusion_samples: 1
+  fold.colabfold:
+    msa_mode: precomputed     # precomputed | server  (server FAILS on Euler nodes)
+    msa_dir: results/msa
+    num_recycles: 1
+  fold.chai:
+    num_trunk_recycles: 3
+  fold.tamarind: {}
+
+  # ---------------- scoring ----------------
+  score.tier1:
+    ph: 7.0
+    low_complexity_window: 10
+    low_complexity_max_fraction: 0.6     # one residue type over this fraction = flagged
+    max_homopolymer_run: 4
+    novelty:
+      enabled: false          # needs MMseqs2 + a reference DB; see MANIFEST.md
+      reference_db: null
+      sensitivity: 5.7
+      max_evalue: 1.0e-3
+
+  score.tier2:
+    active_site_shell: 8.0    # A around catalytic residues for local pLDDT
+    plddt_min: 70.0
+    pae_max: 10.0
+    geometry_tolerance_scale: 1.0        # multiplies each tol in the target config
+    sasa_probe_radius: 1.4
+    hydrophobic_patch_min_area: 100.0    # A^2
+    foldseek:
+      enabled: false          # needs Foldseek + PDB DB; see MANIFEST.md
+      reference_db: null
+
+# Leaderboard filters and ranking. Thresholds are deliberately in one place so
+# a judge question ("why 70?") has one answer and DECISIONS.md records it.
+leaderboard:
+  filters:
+    - {metric: catalytic_integrity, op: "==", value: 1.0, hard: true}
+    - {metric: mean_plddt, op: ">=", value: 70.0, hard: false}
+    - {metric: unpaired_cys_delta, op: "<=", value: 0, hard: false}
+    - {metric: max_homopolymer_run, op: "<=", value: 4, hard: false}
+  # Weighted sum of z-scored metrics; sign says which direction is better.
+  ranking:
+    - {metric: mean_plddt, weight: 1.0, direction: higher}
+    - {metric: active_site_plddt, weight: 1.5, direction: higher}
+    - {metric: catalytic_geometry_worst_dev, weight: 1.5, direction: lower}
+    - {metric: self_consistency_rmsd, weight: 1.0, direction: lower}
+    - {metric: seq_novelty, weight: 0.5, direction: higher}
