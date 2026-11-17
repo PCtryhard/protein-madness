@@ -10,19 +10,44 @@ not you.
 git clone https://github.com/PCtryhard/protein-madness.git && cd protein-madness
 ```
 
+> **The venv is not in the repo.** `.venv/` is gitignored on purpose — it is
+> machine-specific and hundreds of megabytes, and a Windows venv will not run on
+> macOS. You build your own, below. If you cloned and could not find
+> `.venv/Scripts`, that is expected and nothing failed to push.
+
 ```bash
-python -m venv .venv && source .venv/Scripts/activate && pip install -r env/requirements.txt
+python -m venv .venv
 ```
 
-On macOS/Linux the activate line is `source .venv/bin/activate`.
+Then activate it. **This line is different in every shell**, which is the usual
+reason step 1 goes wrong:
+
+| Shell | Command |
+| --- | --- |
+| Windows PowerShell | `.venv\Scripts\Activate.ps1` |
+| Windows cmd.exe | `.venv\Scripts\activate.bat` |
+| Windows Git Bash | `source .venv/Scripts/activate` |
+| macOS / Linux / WSL | `source .venv/bin/activate` |
+
+Your prompt should now start with `(.venv)`. If PowerShell refuses with an
+execution-policy error, use Git Bash instead, or run
+`Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` first.
+
+```bash
+pip install -r env/requirements.txt
+```
+
 With conda/mamba instead: `mamba env create -f env/environment.yml && mamba activate enzyme-hack`.
 
 Python 3.12 is what everything is pinned against. The CPU path needs no GPU, no
 model weights and no network.
 
-> **Do not put the venv on OneDrive/Dropbox if you can avoid it.** Sync will
-> fight you over thousands of small files. `python -m venv ~/.venvs/protein-madness`
-> and activate from there works fine.
+> **Do not put the venv inside a OneDrive/Dropbox folder if you can avoid it.**
+> Sync will fight you over thousands of small files. Creating it outside the
+> synced folder works fine — `python -m venv ~/.venvs/protein-madness`, then
+> activate with `~/.venvs/protein-madness/Scripts/activate` (Windows) or
+> `source ~/.venvs/protein-madness/bin/activate` (macOS/Linux). Adjust the paths
+> in the table above accordingly; everything else is unchanged.
 
 ## 2. Smoke test (2 min)
 

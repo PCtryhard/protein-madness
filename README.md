@@ -15,12 +15,50 @@ first.
 
 ## Quickstart
 
+> **The virtual environment is not in the repo and never will be.** `.venv/` is
+> gitignored on purpose: it is machine-specific and hundreds of megabytes, and a
+> Windows venv does not work on macOS anyway. You create it yourself in step 2 —
+> nothing is missing from your clone.
+
+**1. Clone**
+
 ```bash
 git clone https://github.com/PCtryhard/protein-madness.git && cd protein-madness
-python -m venv .venv && source .venv/Scripts/activate   # Windows; use .venv/bin/activate elsewhere
-pip install -r env/requirements.txt
-bash scripts/smoke_test.sh                               # ~1 min, CPU only, must print SMOKE TEST PASSED
 ```
+
+**2. Create the virtual environment**
+
+```bash
+python -m venv .venv
+```
+
+**3. Activate it** — the command depends on your shell, and this is where people trip:
+
+| Shell | Command |
+| --- | --- |
+| Windows PowerShell | `.venv\Scripts\Activate.ps1` |
+| Windows cmd.exe | `.venv\Scripts\activate.bat` |
+| Windows Git Bash | `source .venv/Scripts/activate` |
+| macOS / Linux / WSL | `source .venv/bin/activate` |
+
+Your prompt should now start with `(.venv)`. If PowerShell refuses with an
+execution-policy error, either use Git Bash instead or run
+`Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` first.
+
+**4. Install the pinned dependencies and check it works**
+
+```bash
+pip install -r env/requirements.txt
+```
+
+```bash
+bash scripts/smoke_test.sh
+```
+
+Takes about a minute, CPU only, no GPU or model weights needed. It must print
+`SMOKE TEST PASSED`. On Windows run it from Git Bash; an activated venv is
+picked up automatically, or point it at one explicitly with
+`PYTHON=.venv/Scripts/python bash scripts/smoke_test.sh`.
 
 Saturday morning, after the challenge is announced:
 
