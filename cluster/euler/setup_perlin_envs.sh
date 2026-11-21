@@ -3,7 +3,6 @@
 set -euo pipefail
 
 : "${SCRATCH:?Run on Euler with SCRATCH set}"
-command -v conda >/dev/null || { echo "Conda must be available in this shell." >&2; exit 1; }
 
 envs="${PM_PERLIN_ENVS:-$HOME/pm-perlin-envs}"
 assets="${PM_PERLIN_ASSETS:-$SCRATCH/pm-perlin}"
@@ -15,11 +14,23 @@ mpnn_weights="$assets/weights/ligandmpnn_v_32_010_25.pt"
 rfd3_weights="$assets/weights/rfd3"
 boltz_cache="$assets/boltz-cache"
 mkdir -p "$envs" "$assets/weights" "$rfd3_weights" "$boltz_cache"
+uv="$envs/bootstrap/uv"
+if [[ ! -x "$uv" ]]; then
+    installer=$(mktemp)
+    trap 'rm -f -- "$installer"' EXIT
+    curl -fLsS https://astral.sh/uv/install.sh -o "$installer"
+    UV_UNMANAGED_INSTALL="$envs/bootstrap" sh "$installer"
+    rm -f -- "$installer"
+    trap - EXIT
+fi
+export UV_PYTHON_INSTALL_DIR="$envs/python"
+export UV_CACHE_DIR="$assets/uv-cache"
+
 
 make_env() {
     local prefix=$1 python_version=$2
     if [[ ! -x "$prefix/bin/python" ]]; then
-        conda create -y -p "$prefix" "python=$python_version" pip
+        "$uv" venv --managed-python --python "$python_version" --seed "$prefix"
     fi
 }
 
@@ -77,6 +88,7 @@ PY
 for prefix in "$rfd3" "$mpnn" "$boltz"; do
     "$prefix/bin/python" -m pip check
 done
+"$rfd3/bin/python" -c 'from rfd3.inference.input_parsing import DesignInputSpecification'
 "$rfd3/bin/rfd3" --help >/dev/null
 "$mpnn/bin/python" "$adapter" --help >/dev/null
 "$boltz/bin/boltz" predict --help >/dev/null
