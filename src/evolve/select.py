@@ -31,9 +31,22 @@ import numpy as np
 
 log = logging.getLogger("pipeline.evolve.select")
 
-#: Target distance for a productive contact. Below this, no penalty: the
-#: geometry is already as good as the metric can see.
+#: Upper edge of a productive contact. Beyond this the interaction is too weak.
 IDEAL_CONTACT_A = 3.5
+#: **Lower** edge. The scored contacts are hydrogen bonds - ASP OD2 to the
+#: acidic N3-H of the benzotriazole, GLN NE2 to N1 - and an O...N hydrogen bond
+#: does not get better indefinitely as it shortens. Below ~2.4 A you are into
+#: van der Waals repulsion, not a stronger bond. HG3.17 itself sits at 2.53 A.
+#:
+#: This floor matters: an earlier version penalised only long contacts, so a
+#: physically impossible 1.5 A contact scored as PERFECT. The organisers'
+#: slide describes their geometry term as comparing "against the ideal
+#: approach geometry", which is a deviation from a target, not a one-sided
+#: "closer is better" - so one-sided was likely wrong about their metric too.
+MIN_CONTACT_A = 2.4
+#: Being too close is worse than being slightly too far: a clash destabilises
+#: the complex, while a long contact is merely weak.
+TOO_CLOSE_MULTIPLIER = 2.0
 
 
 @dataclass(frozen=True)
@@ -85,16 +98,32 @@ class FitnessWeights:
     spread: float = 1.0
 
 
-def contact_penalty(distance: float, ideal: float = IDEAL_CONTACT_A) -> float:
-    """Angstroms beyond the ideal approach distance. Zero if close enough.
+def contact_penalty(
+    distance: float,
+    ideal: float = IDEAL_CONTACT_A,
+    minimum: float = MIN_CONTACT_A,
+) -> float:
+    """Deviation from a productive hydrogen-bond distance, in angstroms.
 
-    One-sided on purpose: a contact at 3.0 A is not worse than one at 3.5 A for
-    any reason the scoring metric can see, and penalising it would push designs
-    towards a precision we have no evidence the judge rewards.
+    **Two-sided.** The window is ``[2.4, 3.5] A``: inside it costs nothing,
+    outside it costs the distance to the nearest edge, and being too close
+    costs double because a clash destabilises the complex while a long contact
+    is merely weak.
+
+    It is a *band*, not "closer is better". These contacts are hydrogen bonds,
+    and an O...N hydrogen bond stops improving somewhere around 2.5 A - below
+    that the atoms are simply overlapping. HG3.17, the most active Kemp
+    eliminase known, sits at 2.53 A, not at 1.5 A, and that is not an accident
+    of its evolution; it is where the optimum is.
     """
     if not math.isfinite(distance):
         return math.inf
-    return max(0.0, float(distance) - ideal)
+    d = float(distance)
+    if d > ideal:
+        return d - ideal
+    if d < minimum:
+        return (minimum - d) * TOO_CLOSE_MULTIPLIER
+    return 0.0
 
 
 def fitness(aggregate: dict, weights: FitnessWeights = FitnessWeights()) -> float:

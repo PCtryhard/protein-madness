@@ -294,6 +294,56 @@ decided.**
 
 ---
 
+## 14. Scoring bug: the contact penalty was one-sided ⚠️ fixed
+
+Raised by Max: *is the distance metric an optimal middle, or closer-is-better?*
+
+It was **closer-is-better, and that was wrong.** `contact_penalty` charged
+nothing below 3.5 Å, so a **1.5 Å contact scored as perfect** — a distance at
+which the atoms are simply overlapping.
+
+Why a band is right:
+
+* The scored contacts are **hydrogen bonds** — ASP `OD2` to the acidic `N3-H`
+  of the benzotriazole, GLN `NE2` to `N1`. An O···N hydrogen bond stops
+  improving around 2.5 Å; below that it is van der Waals repulsion.
+* **HG3.17 sits at 2.53 Å**, not at 1.5 Å. Directed evolution had every
+  opportunity to go shorter and did not.
+* The organisers describe their own term as comparing *"against the ideal
+  approach geometry"* — a deviation from a target, which is two-sided. Our
+  one-sided version was probably wrong about their metric, not just the physics.
+
+Now a window of **[2.4, 3.5] Å**: free inside, distance-to-edge outside, and
+**too-close costs double** because a clash destabilises the complex while a long
+contact is merely weak.
+
+**Re-ranked batch 1: the order is unchanged**, top design 0.65 → 0.73 (its
+2.36 Å now pays a small floor penalty). So this changes none of today's
+conclusions — but it closes a hole that the evolution loop would have found and
+exploited, because searching for extreme values is exactly what it does.
+
+### On "are we just rebuilding HG3.17?"
+
+Partly, and deliberately — but the part that counts is novel.
+
+| | inherited from HG3.17 | ours |
+|---|---|---|
+| catalytic constellation | 3 atoms of ASP, 3 of GLN, the 6NT pose (4BS0) | — |
+| sequence | nothing — **0.000 identity** to UniRef90 | all 260 residues |
+| fold | nothing — best design's closest PDB match is 3TP4 at TM 0.587 | the whole scaffold |
+
+The challenge supplies that motif; the task is to build a *novel protein* that
+holds it. The identity and TM filters exist to enforce exactly that split.
+
+**One circularity we introduced ourselves, and should keep visible:** §12 set
+`ideal_angle_deg` to 131° *measured from HG3.17*. That makes our score reward
+"geometrically like HG3.17" by construction, so it **cannot recognise a better
+geometry that differs from HG3.17's**. It is still the best-grounded number
+available — the only experimentally validated high-activity Kemp geometry we
+have — but it is an assumption, not a discovery.
+
+---
+
 ## Open and unresolved
 
 | | State |

@@ -319,3 +319,37 @@ def test_knocking_out_the_catalytic_base_is_punished():
     from src.evolve.select import fitness
     knockout = dict(HG317, base_to_ligand_a_mean=9.0)
     assert fitness(knockout) > fitness(HG317) + 3.0
+
+
+# --------------------------------- the contact window is a BAND, not a ramp
+
+def test_contact_penalty_is_two_sided():
+    """Closer is NOT always better. These are hydrogen bonds, and an O...N
+    hydrogen bond does not keep improving as the atoms overlap."""
+    from src.evolve.select import contact_penalty
+    assert contact_penalty(2.4) == 0.0          # lower edge
+    assert contact_penalty(2.53) == 0.0         # HG3.17 itself
+    assert contact_penalty(3.0) == 0.0          # middle of the band
+    assert contact_penalty(3.5) == 0.0          # upper edge
+    assert contact_penalty(4.5) > 0.0           # too far
+    assert contact_penalty(1.5) > 0.0           # physically impossible
+
+
+def test_an_impossible_contact_is_not_rewarded():
+    """Regression: the one-sided version scored 1.5 A as PERFECT."""
+    from src.evolve.select import contact_penalty
+    assert contact_penalty(1.5) > contact_penalty(4.0), (
+        "a 1.5 A contact must cost more than a merely weak 4.0 A one"
+    )
+
+
+def test_too_close_costs_more_than_equally_too_far():
+    """A clash destabilises; a long contact is only weak."""
+    from src.evolve.select import contact_penalty
+    assert contact_penalty(2.4 - 0.5) > contact_penalty(3.5 + 0.5)
+
+
+def test_the_real_enzyme_still_sits_in_the_free_window():
+    from src.evolve.select import contact_penalty
+    assert contact_penalty(2.53) == 0.0         # HG3.17 base
+    assert contact_penalty(3.10) == 0.0         # HG3.17 donor
