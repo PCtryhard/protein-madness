@@ -69,7 +69,7 @@ class DesignSpec:
 
     key: str
     input_pdb: Path
-    contig: str
+    contig: str | None
     unindex: str
     select_fixed_atoms: dict[str, str]
     ligand: str | None = None
@@ -82,10 +82,11 @@ class DesignSpec:
             # Absolute, because RFD3 resolves it relative to its own cwd and
             # the job's cwd is not the inputs directory.
             "input": str(self.input_pdb.resolve()),
-            "contig": self.contig,
             "unindex": self.unindex,
             "select_fixed_atoms": dict(self.select_fixed_atoms),
         }
+        if self.contig is not None:
+            value["contig"] = self.contig
         if self.ligand:
             value["ligand"] = self.ligand
         if self.partial_t is not None:
@@ -168,7 +169,7 @@ def build_command(
     out_dir: Path,
     n_designs: int,
 ) -> list[str]:
-    """The RFD3 command line: a binary plus Hydra-style key=value overrides.
+    """The RFD3 command line: a binary plus Hydra-style engine overrides.
 
     Partial diffusion is NOT set here. `rfd3 partial_T=10` fails Hydra
     composition, and `+partial_T=10` then fails with
@@ -224,8 +225,10 @@ def run(
              for spec in specs]
 
     if partial:
-        specs = [replace(spec, partial_t=cfg.partial_t) for spec in specs]
-
+        # contig is dropped: RFD3 forbids `length` during partial diffusion
+        # and ignores the contig, since the parent's own length is the target.
+        specs = [replace(spec, contig=None, partial_t=float(cfg.partial_t))
+                 for spec in specs]
     input_json = write_input_json(specs, out_dir / "rfd3_inputs.json")
     count = cfg.n_batches if n_designs is None else n_designs
     cmd = build_command(

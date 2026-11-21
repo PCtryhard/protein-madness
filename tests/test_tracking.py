@@ -27,6 +27,7 @@ from src.tracking import (
     read_pdb,
     read_structure,
     seed_to_hal_map,
+    seed_to_hal_map_rfd3,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -496,6 +497,12 @@ def test_cif_missing_required_columns_raises(tmp_path):
 # --------------------------------------------------------------------------
 
 
+def _wiggle_motif() -> MotifCfg:
+    return MotifCfg(
+        fixed=[ResidueRef(chain="A", resnum=229), ResidueRef(chain="A", resnum=291)]
+    )
+
+
 def _wiggle_metadata(tmp_path, mapping: dict[str, str]) -> Path:
     import json
 
@@ -504,49 +511,47 @@ def _wiggle_metadata(tmp_path, mapping: dict[str, str]) -> Path:
     return path
 
 
-def test_compose_seed_to_hal_follows_both_hops(tmp_path):
+def test_seed_to_input_follows_both_hops(tmp_path):
     """The wiggle's index map is keyed by the PARENT backbone, not the seed.
 
     Its spec is relabelled into the parent's numbering so RFD3 accepts it, so
-    the map it writes says parent -> new. The seed numbering only comes back
-    by composing that onto the parent's own seed -> parent map.
+    the map RFD3 writes says parent -> new. Seed numbering only comes back by
+    composing that onto the parent's own seed -> parent map, which is what
+    `seed_to_input` does.
     """
-    from src.tracking import compose_seed_to_hal_rfd3
-
-    parent_seed_to_hal = {("A", 229): ("A", 142), ("A", 291): ("A", 179)}
+    motif = _wiggle_motif()
     meta = _wiggle_metadata(tmp_path, {"A142": "A71", "A179": "A129"})
+    seed_to_input = {("A", 229): ("A", 142), ("A", 291): ("A", 179)}
 
-    composed = compose_seed_to_hal_rfd3(meta, parent_seed_to_hal)
+    mapping = seed_to_hal_map_rfd3(meta, motif, seed_to_input=seed_to_input)
 
-    assert composed == {("A", 229): ("A", 71), ("A", 291): ("A", 129)}
+    assert mapping == {("A", 229): ("A", 71), ("A", 291): ("A", 129)}
 
 
-def test_compose_seed_to_hal_raises_when_a_hop_is_missing(tmp_path):
-    """A motif residue that cannot be traced must stop, not be dropped.
+def test_seed_to_input_raises_when_a_hop_is_missing(tmp_path):
+    """A motif residue that cannot be traced must stop the design.
 
     Scoring a wiggle whose motif silently moved is the failure the whole chain
     of maps exists to prevent.
     """
-    from src.tracking import MotifTraceError, compose_seed_to_hal_rfd3
-
-    parent_seed_to_hal = {("A", 229): ("A", 142), ("A", 291): ("A", 179)}
+    motif = _wiggle_motif()
     meta = _wiggle_metadata(tmp_path, {"A142": "A71"})   # A179 absent
-
-    with pytest.raises(MotifTraceError, match=r"A', 179"):
-        compose_seed_to_hal_rfd3(meta, parent_seed_to_hal)
-
-
-def test_compose_seed_to_hal_rejects_seed_keyed_map(tmp_path):
-    """A map still keyed by seed residues is the bug this replaced.
-
-    If the spec was not relabelled, the map says seed -> new and composing it
-    onto the parent's map finds nothing. That must raise rather than appear to
-    work.
-    """
-    from src.tracking import MotifTraceError, compose_seed_to_hal_rfd3
-
-    parent_seed_to_hal = {("A", 229): ("A", 142), ("A", 291): ("A", 179)}
-    meta = _wiggle_metadata(tmp_path, {"A229": "A71", "A291": "A129"})
+    seed_to_input = {("A", 229): ("A", 142), ("A", 291): ("A", 179)}
 
     with pytest.raises(MotifTraceError):
-        compose_seed_to_hal_rfd3(meta, parent_seed_to_hal)
+        seed_to_hal_map_rfd3(meta, motif, seed_to_input=seed_to_input)
+
+
+def test_seed_keyed_map_without_relabelling_raises(tmp_path):
+    """A map still keyed by seed residues means the spec was not relabelled.
+
+    That was the original bug: RFD3 was handed a seed-numbered spec against a
+    renumbered backbone. Composing then finds nothing, and it must raise
+    rather than appear to work.
+    """
+    motif = _wiggle_motif()
+    meta = _wiggle_metadata(tmp_path, {"A229": "A71", "A291": "A129"})
+    seed_to_input = {("A", 229): ("A", 142), ("A", 291): ("A", 179)}
+
+    with pytest.raises(MotifTraceError):
+        seed_to_hal_map_rfd3(meta, motif, seed_to_input=seed_to_input)

@@ -185,6 +185,40 @@ def test_locate_output_finds_nested_results(tmp_path):
 # --------------------------------------------------------------------------
 
 
+def test_rfd3_partial_diffusion_sets_noise_in_design_spec(
+    pipeline, tmp_path, monkeypatch
+):
+    """partial_t travels in the input JSON, and the contig is dropped.
+
+    RFD3 forbids `length` during partial diffusion and ignores the contig,
+    since the parent's own length is the target.
+    """
+    import json
+
+    from src.stages import rfd3
+
+    source = tmp_path / "parent.pdb"
+    source.touch()
+    out = tmp_path / "out"
+    spec = rfd3.DesignSpec("k", source, "260-260", "A42", {"A42": "ALL"})
+    commands = []
+    monkeypatch.setattr(
+        rfd3, "run_command", lambda cmd, **kwargs: commands.append(cmd)
+    )
+    monkeypatch.setattr(rfd3, "collect_outputs", lambda *args, **kwargs: [])
+
+    rfd3.run(pipeline.rfd3, [spec], out, n_designs=4, partial=True)
+
+    payload = json.loads((out / "rfd3_inputs.json").read_text())["k"]
+    assert payload["partial_t"] == pipeline.rfd3.partial_t
+    assert "contig" not in payload
+    joined = " ".join(commands[0])
+    assert "partial_T" not in joined
+    assert "json_keys_subset=[k]" in joined
+    assert "n_batches=4" in joined
+    assert f"ckpt_path={pipeline.rfd3.checkpoint}" in joined
+
+
 def test_rfd3_command_has_no_partial_diffusion_override(pipeline, tmp_path):
     """Partial diffusion must NOT appear on the command line.
 
@@ -202,9 +236,6 @@ def test_rfd3_command_has_no_partial_diffusion_override(pipeline, tmp_path):
     joined = " ".join(cmd)
     assert "partial_T" not in joined
     assert "partial_t" not in joined
-    assert "json_keys_subset=[k]" in joined
-    assert "n_batches=4" in joined
-    assert f"ckpt_path={pipeline.rfd3.checkpoint}" in joined
 
 
 def test_rfd3_partial_diffusion_travels_in_the_design_spec(tmp_path):
@@ -219,7 +250,7 @@ def test_rfd3_partial_diffusion_travels_in_the_design_spec(tmp_path):
     spec = rfd3.DesignSpec(
         key="k",
         input_pdb=tmp_path / "parent.pdb",
-        contig="260-260",
+        contig=None,
         unindex="A142,A179",
         select_fixed_atoms={"A142": "OD1,CG,OD2", "A179": "CD2,CE1,NE2"},
         ligand="6NT",
@@ -266,6 +297,19 @@ def test_rfd3_fresh_scaffolding_omits_partial_t(tmp_path):
     )
     assert "partial_t" not in spec.as_json_value()
 
+
+
+def test_wiggle_metadata_maps_back_to_original_seed_ids(tmp_path):
+    from src.tracking import seed_to_hal_map_rfd3
+
+    motif = MotifCfg(fixed=[ResidueRef(chain="A", resnum=229),
+                            ResidueRef(chain="A", resnum=291)])
+    metadata = tmp_path / "output.json"
+    metadata.write_text('{"diffused_index_map": {"A42": "A44", "A77": "A78"}}')
+    parent = {("A", 229): ("A", 42), ("A", 291): ("A", 77)}
+    assert seed_to_hal_map_rfd3(metadata, motif, seed_to_input=parent) == {
+        ("A", 229): ("A", 44), ("A", 291): ("A", 78),
+    }
 
 
 def test_fixed_residues_are_passed_in_backbone_numbering():

@@ -10,19 +10,34 @@
 set -eo pipefail
 cd "${PM_REPO:-$SLURM_SUBMIT_DIR}"
 source "$HOME/protein-madness-env/activate.sh"
-name="fastrelax-01-$SLURM_JOB_ID"
-motif="${PM_MOTIF:-data/01/inputs/01_fastrelax_motif_af3.pdb}"
+model_env_file="${PM_MODEL_ENV_FILE:-${PM_PERLIN_ENVS:-$HOME/pm-perlin-envs}/launcher.env}"
+if [[ ! -r "$model_env_file" ]]; then
+    echo "Missing $model_env_file. Run cluster/euler/setup_perlin_envs.sh on the login node." >&2
+    exit 1
+fi
+source "$model_env_file"
+for key in PM_RFD3_BIN PM_RFD3_CKPT PM_MPNN_SCRIPT PM_MPNN_CKPT PM_BOLTZ_BIN PM_BOLTZ_CACHE; do
+    if [[ -z "${!key}" ]]; then
+        echo "$model_env_file does not define $key" >&2
+        exit 1
+    fi
+done
+variant="${PM_VARIANT:-01}"
+case "$variant" in
+    01|02) ;;
+    *) echo "Set PM_VARIANT to 01 or 02." >&2; exit 1 ;;
+esac
+name="fastrelax-$variant-$SLURM_JOB_ID"
+data_dir="data/$variant"
+motif="${PM_MOTIF:-$data_dir/inputs/${variant}_fastrelax_motif_af3.pdb}"
 test -s "$motif" || { echo "Missing motif: $motif" >&2; exit 1; }
 
 for stage in inputs rfd3 ligandmpnn boltz scores; do
-    mkdir -p "data/01/$stage/$name"
+    mkdir -p "$data_dir/$stage/$name"
 done
-run_inputs="$PWD/data/01/inputs/$name"
-export PM_RFD3_BIN="${PM_RFD3_BIN:-$HOME/rfd3-env/bin/rfd3}"
-export PM_BOLTZ_BIN="${PM_BOLTZ_BIN:-$HOME/protein-madness-env/bin/boltz}"
-export PM_BOLTZ_CACHE="${PM_BOLTZ_CACHE:-$SCRATCH/boltz-cache}"
+run_inputs="$PWD/$data_dir/inputs/$name"
 export PM_MOTIF="$motif"
-python - "$run_inputs" <<'PY'
+python - "$run_inputs" "$variant" <<'PY'
 import os
 from pathlib import Path
 import shlex
@@ -68,6 +83,7 @@ cfg["rfd3"].update(binary=rfd3, checkpoint=existing("PM_RFD3_CKPT", "rfd3_latest
 mpnn = existing("PM_MPNN_SCRIPT", "run.py", parent="ligandmpnn")
 cfg["ligandmpnn"].update(
     run_script=mpnn,
+    python=os.environ.get("PM_MPNN_PYTHON", sys.executable),
     checkpoint=existing("PM_MPNN_CKPT", "ligandmpnn_v_32_010_25.pt"),
 )
 cache = Path(os.environ["PM_BOLTZ_CACHE"]).expanduser().resolve()
@@ -76,12 +92,30 @@ if missing := [asset for asset in required if not (cache / asset).exists()]:
     raise SystemExit(f"Boltz cache {cache} is missing: {', '.join(missing)}")
 cfg["boltz"].update(binary=executable("PM_BOLTZ_BIN"), cache_dir=str(cache), assets_dir=None)
 
-target = yaml.safe_load(Path("config/targets/01_his_asp.yaml").read_text())
+variant = sys.argv[2]
 motif = out / "motif.pdb"
 shutil.copyfile(os.environ["PM_MOTIF"], motif)
-target["seeds"][0]["pdb"] = str(motif)
-for name, data in (("pipeline.yaml", cfg), ("target.yaml", target)):
-    (out / name).write_text(yaml.safe_dump(data, sort_keys=False))
+if variant == "01":
+    target = yaml.safe_load(Path("config/targets/01_his_asp.yaml").read_text())
+else:
+    from scripts import build_targets
+
+    residues = build_targets.read_motif(motif)
+    if residues != {229: "ASP", 261: "HIS", 291: "HIS"}:
+        raise SystemExit(f"Variant 02 requires ASP229, HIS261, HIS291; found {residues}")
+    plans = build_targets.plan_bonds(residues)
+    distance = cfg["scoring"]["distance"]
+    build_targets.measure(plans, motif, distance["clash"], distance["tolerated"])
+    broken = build_targets.unusable_bonds(plans)
+    if broken:
+        raise SystemExit(f"Unusable seed contacts: {', '.join(p.bond_id for p in broken)}")
+    (out / "target.yaml").write_text(
+        build_targets.render(variant, "his_asp_his", motif, residues, plans)
+    )
+if variant == "01":
+    target["seeds"][0]["pdb"] = str(motif)
+    (out / "target.yaml").write_text(yaml.safe_dump(target, sort_keys=False))
+(out / "pipeline.yaml").write_text(yaml.safe_dump(cfg, sort_keys=False))
 PY
 
 pipeline="$run_inputs/pipeline.yaml"
@@ -89,25 +123,25 @@ target="$run_inputs/target.yaml"
 python -m src.cli smoke --pipeline "$pipeline" --target "$target"
 python -m src.cli measure --pipeline "$pipeline" --target "$target" --pdb "$run_inputs/motif.pdb"
 
-# Keep native outputs and copy each stage to its matching data/01 folder.
+# Keep native outputs and copy each stage to its matching variant folder.
 export_pm_stages() {
     local status=$?
     trap - EXIT
-    python - "$name" <<'PY'
+    python - "$name" "$data_dir" <<'PY'
 from pathlib import Path
 import shutil
 import sys
 
-name = sys.argv[1]
+name, data_dir = sys.argv[1:]
 run = Path("runs") / name
 structures = run / "structures"
 folders = {"rfd3": "rfd3", "ligandmpnn": "mpnn_*", "boltz": "boltz_r*"}
 for stage, pattern in folders.items():
-    dest = Path("data/01") / stage / name
+    dest = Path(data_dir) / stage / name
     for folder in sorted(structures.rglob(pattern)):
         if folder.is_dir():
             shutil.copytree(folder, dest / folder.relative_to(structures), dirs_exist_ok=True)
-dest = Path("data/01/scores") / name
+dest = Path(data_dir) / "scores" / name
 for filename in ("designs.csv", "sequences.fasta", "progress.txt", "report.md", "stages.jsonl"):
     file = run / filename
     if file.is_file():

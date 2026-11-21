@@ -481,7 +481,8 @@ def _parse_residue_label(label: str, where: str) -> ResKey:
 
 
 def seed_to_hal_map_rfd3(
-    metadata_path: str | Path, motif: MotifCfg
+    metadata_path: str | Path, motif: MotifCfg,
+    *, seed_to_input: dict[ResKey, ResKey] | None = None,
 ) -> dict[ResKey, ResKey]:
     """Build the seed -> RFD3-output residue map from the metadata JSON.
 
@@ -520,6 +521,9 @@ def seed_to_hal_map_rfd3(
         for src, dst in raw.items()
     }
 
+    if seed_to_input is not None:
+        mapping = {seed: mapping[source] for seed, source in seed_to_input.items()
+                   if source in mapping}
     missing = sorted(motif.as_keys() - set(mapping))
     if missing:
         raise MotifTraceError(
@@ -528,63 +532,6 @@ def seed_to_hal_map_rfd3(
             "motif and the RFD3 input spec disagree."
         )
     return mapping
-
-
-def compose_seed_to_hal_rfd3(
-    metadata_path: str | Path, parent_seed_to_hal: dict[ResKey, ResKey]
-) -> dict[ResKey, ResKey]:
-    """seed -> new-output map for a partial-diffusion (wiggle) backbone.
-
-    The wiggle re-noises a parent BACKBONE, so its RFD3 spec is written in the
-    parent's numbering and the resulting `diffused_index_map` is keyed by
-    parent-backbone residues -- not by seed residues. Looking the seed up
-    directly therefore fails, correctly, because that map never mentions it.
-
-    The lineage is two hops:
-
-        seed  --parent's provenance-->  parent_hal  --this map-->  new_hal
-
-    so compose them. Raises rather than dropping a residue: a wiggle whose
-    motif cannot be traced must not be scored as though it could.
-    """
-    path = Path(metadata_path)
-    if not path.is_file():
-        raise MotifTraceError(
-            f"RFD3 metadata not found: {path}. Without it the motif cannot be "
-            "traced; check that dump_prediction_metadata_json was passed."
-        )
-    try:
-        metadata = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise MotifTraceError(f"{path} is not valid JSON: {exc}") from exc
-
-    raw = metadata.get("diffused_index_map")
-    if not isinstance(raw, dict) or not raw:
-        raise MotifTraceError(
-            f"{path} has no usable 'diffused_index_map'. Keys present: "
-            f"{sorted(metadata)}. The motif mapping lives only there."
-        )
-
-    hop2 = {
-        _parse_residue_label(src, str(path)): _parse_residue_label(dst, str(path))
-        for src, dst in raw.items()
-    }
-
-    composed: dict[ResKey, ResKey] = {}
-    missing: list[ResKey] = []
-    for seed_key, parent_key in parent_seed_to_hal.items():
-        if parent_key not in hop2:
-            missing.append(parent_key)
-            continue
-        composed[seed_key] = hop2[parent_key]
-
-    if missing:
-        raise MotifTraceError(
-            f"{path}: parent-backbone residues {sorted(missing)} are absent "
-            f"from diffused_index_map, which mapped {sorted(hop2)}. The wiggle "
-            "spec and the parent's provenance disagree."
-        )
-    return composed
 
 
 # --------------------------------------------------------------------------
