@@ -47,6 +47,7 @@ from .store import (
     sequence_hash,
 )
 from .tracking import (
+    ResKey,
     write_pdb,
     Provenance,
     TrackingError,
@@ -518,13 +519,16 @@ class Runner:
         branch: str,
         parent_id: str | None,
         gpu: int,
+        seed_to_input: dict[ResKey, ResKey] | None = None,
     ) -> list[Candidate]:
         """LigandMPNN then Boltz-2 then score, for each backbone."""
         out: list[Candidate] = []
         motif = self.cfg.target.motif
 
         for backbone in backbones:
-            seed_to_hal = seed_to_hal_map_rfd3(backbone.metadata, motif)
+            seed_to_hal = seed_to_hal_map_rfd3(
+                backbone.metadata, motif, seed_to_input=seed_to_input
+            )
             backbone_structure = read_structure(
                 backbone.structure, self.cfg.target.ligand.ccd
             )
@@ -630,8 +634,25 @@ class Runner:
                 repo_root=self.repo_root,
                 key=f"{self.cfg.target.name}_{seed.id}_wiggle",
             )
-            # The wiggle re-noises the parent's backbone, not the seed.
-            spec = replace(spec, input_pdb=Path(job.backbone_path))
+            row = self.store.get(job.parent_id)
+            if row is None:
+                raise TrackingError(f"no stored provenance for parent {job.parent_id}")
+            provenance = Provenance.from_json(row.provenance)
+            seed_to_input = {}
+            fixed = {spec.ligand: "ALL"} if spec.ligand else {}
+            labels = []
+            for seed_key in sorted(self.cfg.target.motif.as_keys()):
+                if self.cfg.pipeline.search.wiggle.source == "boltz_prediction":
+                    source_key = provenance.seed_residue_in_boltz(*seed_key)
+                else:
+                    source_key = provenance.seed_to_hal[seed_key]
+                seed_to_input[seed_key] = source_key
+                source_label = f"{source_key[0]}{source_key[1]}"
+                labels.append(source_label)
+                seed_label = f"{seed_key[0]}{seed_key[1]}"
+                fixed[source_label] = spec.select_fixed_atoms[seed_label]
+            spec = replace(spec, input_pdb=Path(job.backbone_path),
+                           unindex=",".join(labels), select_fixed_atoms=fixed)
             n = (self.cfg.pipeline.search.wiggle.designs_per_parent
                  or self.cfg.pipeline.rfd3.n_batches)
             self._stage_begin(
@@ -644,7 +665,7 @@ class Runner:
                 specs=[spec],
                 out_dir=design_dir / "rfd3",
                 n_designs=n,
-                partial=True,       # the wiggle: re-noise for partial_T steps
+                partial=True,       # RFD3 partial noise in angstroms
                 gpu=gpu,
                 seed=self.cfg.pipeline.run.seed + search.cycle,
             )
@@ -658,6 +679,7 @@ class Runner:
                 branch="wiggle",
                 parent_id=job.parent_id,
                 gpu=gpu,
+                seed_to_input=seed_to_input,
             )
 
         return work

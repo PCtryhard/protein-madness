@@ -68,6 +68,7 @@ cfg["rfd3"].update(binary=rfd3, checkpoint=existing("PM_RFD3_CKPT", "rfd3_latest
 mpnn = existing("PM_MPNN_SCRIPT", "run.py", parent="ligandmpnn")
 cfg["ligandmpnn"].update(
     run_script=mpnn,
+    python=os.environ.get("PM_MPNN_PYTHON", sys.executable),
     checkpoint=existing("PM_MPNN_CKPT", "ligandmpnn_v_32_010_25.pt"),
 )
 cache = Path(os.environ["PM_BOLTZ_CACHE"]).expanduser().resolve()

@@ -69,20 +69,24 @@ class DesignSpec:
 
     key: str
     input_pdb: Path
-    contig: str
+    contig: str | None
     unindex: str
     select_fixed_atoms: dict[str, str]
     ligand: str | None = None
+    partial_t: float | None = None
 
     def as_json_value(self) -> dict:
         value: dict[str, object] = {
             # Absolute, because RFD3 resolves it relative to its own cwd and
             # the job's cwd is not the inputs directory.
             "input": str(self.input_pdb.resolve()),
-            "contig": self.contig,
             "unindex": self.unindex,
             "select_fixed_atoms": dict(self.select_fixed_atoms),
         }
+        if self.contig is not None:
+            value["contig"] = self.contig
+        if self.partial_t is not None:
+            value["partial_t"] = self.partial_t
         if self.ligand:
             value["ligand"] = self.ligand
         return value
@@ -162,13 +166,8 @@ def build_command(
     design_keys: list[str],
     out_dir: Path,
     n_designs: int,
-    partial: bool,
 ) -> list[str]:
-    """The RFD3 command line: a binary plus Hydra-style key=value overrides.
-
-    `partial` adds the partial-diffusion setting for the wiggle branch, which
-    re-noises an existing backbone rather than scaffolding from the seed.
-    """
+    """The RFD3 command line: a binary plus Hydra-style engine overrides."""
     out_dir.mkdir(parents=True, exist_ok=True)
     keys = ",".join(design_keys)
     cmd = [
@@ -185,8 +184,6 @@ def build_command(
         "output_full_json=True",
         "dump_prediction_metadata_json=True",
     ]
-    if partial:
-        cmd.append(f"partial_T={cfg.partial_T}")
     cmd.extend(cfg.extra_args)
     return cmd
 
@@ -218,10 +215,13 @@ def run(
     specs = [replace(spec, input_pdb=_normalised_input(spec.input_pdb, out_dir))
              for spec in specs]
 
+    if partial:
+        specs = [replace(spec, contig=None, partial_t=float(cfg.partial_T))
+                 for spec in specs]
     input_json = write_input_json(specs, out_dir / "rfd3_inputs.json")
     count = cfg.n_batches if n_designs is None else n_designs
     cmd = build_command(
-        cfg, input_json, [s.key for s in specs], out_dir, count, partial
+        cfg, input_json, [s.key for s in specs], out_dir, count
     )
     if seed is not None:
         cmd.append(f"seed={seed}")

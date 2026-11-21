@@ -481,7 +481,8 @@ def _parse_residue_label(label: str, where: str) -> ResKey:
 
 
 def seed_to_hal_map_rfd3(
-    metadata_path: str | Path, motif: MotifCfg
+    metadata_path: str | Path, motif: MotifCfg,
+    *, seed_to_input: dict[ResKey, ResKey] | None = None,
 ) -> dict[ResKey, ResKey]:
     """Build the seed -> RFD3-output residue map from the metadata JSON.
 
@@ -520,6 +521,9 @@ def seed_to_hal_map_rfd3(
         for src, dst in raw.items()
     }
 
+    if seed_to_input is not None:
+        mapping = {seed: mapping[source] for seed, source in seed_to_input.items()
+                   if source in mapping}
     missing = sorted(motif.as_keys() - set(mapping))
     if missing:
         raise MotifTraceError(
