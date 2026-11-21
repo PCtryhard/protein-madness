@@ -229,6 +229,19 @@ def write_fold_script(
     sampling_steps: int = 200,
 ) -> Path:
     """An sbatch script that folds one generation at every requested seed."""
+    # Boltz scans the input directory and refuses anything that is not a .yaml
+    # or .fasta -- including a subdirectory. Writing output inside the input
+    # directory therefore kills the run with
+    #   "Found directory .../boltz_seed1 instead of .fasta or .yaml"
+    # It cost us a 48-design batch, so it is checked here rather than trusted.
+    designs_norm = str(designs_dir).replace("\\", "/").rstrip("/")
+    out_norm = str(out_root).replace("\\", "/").rstrip("/")
+    if out_norm == designs_norm or out_norm.startswith(designs_norm + "/"):
+        raise ValueError(
+            f"out_root {out_root!r} is inside designs_dir {designs_dir!r}; Boltz "
+            f"scans the input directory and will refuse the subdirectory it finds"
+        )
+
     path = Path(path)
     lines = profile.sbatch_header(job_name, f"{out_root}/fold-%j.log")
     lines += [

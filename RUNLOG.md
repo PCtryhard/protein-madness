@@ -153,6 +153,49 @@ as a parallel arm and is judged on measured iPDE. **Running.**
 
 ---
 
+## 10. Scoring audit against mentor guidance
+
+A mentor's framing: co-fold the ligand, weight **distances** above **angles**
+but use both, minimise the **amount of change**, and score **stability**.
+Audited honestly, we had about half of it.
+
+| Asked for | Before | Now |
+|---|---|---|
+| Co-fold the ligand | ✅ 6NT present in every fold, never apo | unchanged |
+| Distances | ✅ both scored contacts | unchanged, still dominant |
+| Angles | ❌ **not measured at all** | `base_angle_deg`, `donor_angle_deg` |
+| Amount of change | ❌ not scored | `design_rmsd_a`: designed structure vs its re-prediction |
+| Stability | ⚠️ `complex_plddt` carried but unused in ranking | a fitness term with a floor at 0.70 |
+| Consistency | ✅ mean − k·spread | now also spans angles, stability and change |
+
+The angle is `root-contact···ligand` — `CG-OD2···N3` for the base,
+`CD-NE2···N1` for the donor. It answers a question distance cannot: a
+carboxylate 3 Å from the ligand but *pointing away* is not a catalytic base.
+
+Weighted as instructed: **distance 1.0 per Å, angle 0.15 per 10° off ideal**,
+so a contact at the right distance and the wrong orientation loses, but angle
+only ever breaks ties between designs that already sit sensibly. The 120° ideal
+is an approximation, which is part of why the weight is low.
+
+`design_rmsd_a` is the organisers' own `backbone_ca_rmsd_from_rfd3`
+(2.16 Å on the reference). Low change means Boltz agrees with what we designed
+— precisely the failure in §1.
+
+## 11. Fold batch 1, first attempt — FAILED ❌
+
+Euler jobs 21817015/16 reported `COMPLETED`, exit 0, and produced **nothing**:
+
+```
+RuntimeError: Found directory .../chunk_a/boltz_seed1 instead of .fasta or .yaml
+```
+
+Self-inflicted: the output directory was placed *inside* the input directory,
+and Boltz scans its input for YAMLs only. Slurm still called it a success —
+a reminder that job state is not evidence. `write_fold_script` now refuses this
+arrangement, with a regression test. Cost ~5 min on two GPUs; no designs lost.
+
+---
+
 ## Open and unresolved
 
 | | State |

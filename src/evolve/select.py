@@ -50,6 +50,30 @@ class FitnessWeights:
     burial: float = 0.05
     #: Target burial. The reference design scores 30; aim above it.
     burial_target: float = 35.0
+    #: Approach angles, per 10 degrees off ideal. Deliberately well below the
+    #: distance weights: a mentor's framing, and the right one -- distance is
+    #: the dominant signal and angle is a tie-breaker between designs that
+    #: already sit at a sensible distance.
+    angle: float = 0.15
+    #: Ideal approach angle at an sp2 acceptor, degrees. An approximation, and
+    #: the low weight above is partly because of that.
+    ideal_angle_deg: float = 120.0
+    #: Angles this far off ideal cost nothing: within the flat part.
+    angle_tolerance_deg: float = 25.0
+
+    #: Stability. complex_plddt is 0-1; a design the model is unsure about is
+    #: one whose geometry we should not believe.
+    stability: float = 3.0
+    #: Below this pLDDT the fold is not credible enough to rank on.
+    plddt_floor: float = 0.70
+
+    #: "Amount of change": CA-RMSD between the structure we designed and the
+    #: one Boltz rebuilds from its sequence. Low change == the active site
+    #: survived re-prediction, which is the whole problem (BRIEF.md 1).
+    change: float = 0.4
+    #: Change below this is free - no design reproduces exactly.
+    change_tolerance_a: float = 1.5
+
     #: k in "mean - k * spread". Penalises designs that only work on one seed.
     spread: float = 1.0
 
@@ -85,6 +109,24 @@ def fitness(aggregate: dict, weights: FitnessWeights = FitnessWeights()) -> floa
     cost += weights.ipde * float(ipde)
     if math.isfinite(burial):
         cost += weights.burial * max(0.0, weights.burial_target - float(burial))
+
+    # Angles: secondary to distance, by weight. A contact at a sensible
+    # distance but pointing the wrong way is not a productive contact.
+    for key in ("base_angle_deg_mean", "donor_angle_deg_mean"):
+        angle = aggregate.get(key, math.nan)
+        if math.isfinite(angle):
+            off = abs(float(angle) - weights.ideal_angle_deg)
+            cost += weights.angle * max(0.0, off - weights.angle_tolerance_deg) / 10.0
+
+    # Stability: an unconfident fold is one whose geometry we should not trust.
+    plddt = aggregate.get("complex_plddt_mean", math.nan)
+    if math.isfinite(plddt):
+        cost += weights.stability * max(0.0, weights.plddt_floor - float(plddt))
+
+    # Amount of change between the design and its re-prediction.
+    change = aggregate.get("design_rmsd_a_mean", math.nan)
+    if math.isfinite(change):
+        cost += weights.change * max(0.0, float(change) - weights.change_tolerance_a)
 
     # Metric 4: penalise designs whose numbers move between seeds. A mediocre
     # mean with near-zero spread is a better bet than a brilliant outlier.
