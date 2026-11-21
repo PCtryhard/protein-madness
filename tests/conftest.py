@@ -1,87 +1,92 @@
-"""Shared fixtures. All expected values in the tests are for the committed toy
-enzyme (hen egg-white lysozyme, PDB 1AKI chain A) and are hardcoded on purpose."""
+"""Shared fixtures. No GPU, no model weights, no network."""
+
+from __future__ import annotations
+
 from pathlib import Path
 
-import numpy as np
 import pytest
-import yaml
 
-from src.io.structure import read_structure, write_structure
-from src.io.target import load_reference, load_target
+from src.config import load, load_pipeline
+from src.tracking import identity_provenance, read_structure
 
 ROOT = Path(__file__).resolve().parents[1]
-TOY_PDB = ROOT / "data" / "toy" / "ref.pdb"
-TOY_TARGET = ROOT / "configs" / "target.example.yaml"
-PIPELINE = ROOT / "configs" / "pipeline.yaml"
-
-TOY_SEQ = (
-    "KVFGRCELAAAMKRHGLDNYRGYSLGNWVCAAKFESNFNTQATNRNTDGSTDYGILQINSRWWCNDGRTPGSRNLCNIP"
-    "CSALLSSDITASVNCAKKIVSDGNGMNAWVAWRNRCKGTDVQAWIRGCRL"
-)
+FIXTURES = ROOT / "tests" / "fixtures"
 
 
 @pytest.fixture(scope="session")
-def toy_target():
-    return load_target(TOY_TARGET)
+def repo_root() -> Path:
+    return ROOT
 
 
 @pytest.fixture(scope="session")
-def toy_ref(toy_target):
-    return load_reference(toy_target)
+def pipeline_path() -> Path:
+    return ROOT / "config" / "pipeline.yaml"
 
 
-@pytest.fixture()
-def nasty_pdb(tmp_path):
-    """The toy enzyme re-numbered the way real PDB files hurt you.
+@pytest.fixture(scope="session")
+def fixture_target_path() -> Path:
+    return FIXTURES / "fixture_target.yaml"
 
-    * chain A -> chain 'E', numbering shifted by +100 (so Glu35 is E:135)
-    * original residues 48,49,50 become 148, 148A, 148B (insertion codes), and
-      everything after is shifted back by 2 (so Asp52 is E:150)
-    * a decoy chain 'B' (copy of residues 1-20) placed BEFORE the real chain
-    * waters kept
-    Returns (path, glu_resi, asp_resi) in the nasty numbering.
+
+@pytest.fixture
+def cfg(pipeline_path, fixture_target_path):
+    """The real pipeline.yaml plus the fixture target.
+
+    Deliberately the real config file: a test that invented its own weights
+    would not catch a change to the shipped defaults, which is exactly the
+    thing a scoring regression would come from.
     """
-    atoms = read_structure(TOY_PDB)
-    prot = atoms[~atoms.hetero].copy()
-    water = atoms[atoms.hetero].copy()
-
-    orig = prot.res_id.copy()
-    new_id = orig + 100
-    ins = np.full(prot.array_length(), "", dtype="U1")
-    new_id[orig == 49] = 148
-    ins[orig == 49] = "A"
-    new_id[orig == 50] = 148
-    ins[orig == 50] = "B"
-    new_id[orig > 50] = orig[orig > 50] + 100 - 2
-    prot.res_id = new_id
-    prot.ins_code = ins
-    prot.chain_id = np.full(prot.array_length(), "E", dtype="U4")
-
-    decoy = atoms[~atoms.hetero & (atoms.res_id <= 20)].copy()
-    decoy.chain_id = np.full(decoy.array_length(), "B", dtype="U4")
-    decoy.coord = decoy.coord + 60.0
-
-    path = tmp_path / "nasty.pdb"
-    write_structure(decoy + prot + water, path)
-    return path, 135, 150
+    return load(pipeline_path, fixture_target_path)
 
 
-@pytest.fixture()
-def nasty_target(nasty_pdb, tmp_path):
-    path, glu, asp = nasty_pdb
-    cfg = {
-        "name": "nasty",
-        "reference_structure": str(path),
-        "chain": "E",
-        "catalytic_residues": [
-            {"resi": glu, "resn": "GLU", "role": "general_acid"},
-            {"resi": asp, "resn": "ASP", "role": "nucleophile"},
-        ],
-        "catalytic_geometry": [
-            {"atoms": [f"{glu}:OE1", f"{asp}:OD1"], "ideal_distance": 7.05, "tol": 1.5}
-        ],
-        "design_region": {"mode": "shell", "shell_radius": 8.0, "exclude": [glu, asp]},
-    }
-    p = tmp_path / "target.yaml"
-    p.write_text(yaml.safe_dump(cfg), encoding="utf-8")
-    return p
+@pytest.fixture
+def pipeline(pipeline_path):
+    return load_pipeline(pipeline_path)
+
+
+def load_fixture(cfg, name: str):
+    """A fixture structure plus an identity Provenance for it.
+
+    The fixtures are already in seed numbering, so both residue maps are the
+    identity -- but resolution still goes through the real `Provenance.resolve`,
+    so the fixtures exercise the production code path.
+    """
+    path = FIXTURES / f"{name}.pdb"
+    structure = read_structure(path, cfg.target.ligand.ccd)
+    ligand_atoms = sorted(
+        {
+            spec.atom
+            for bond in cfg.target.hbonds
+            for spec in (bond.donor, bond.acceptor,
+                         bond.donor_antecedent, bond.acceptor_antecedent)
+            if spec is not None and spec.site == "ligand"
+        }
+    )
+    provenance = identity_provenance(
+        design_id=f"fixture:{name}",
+        scaffold_id="fixture",
+        structure=structure,
+        motif=cfg.target.motif,
+        ligand_atoms=ligand_atoms,
+    )
+    return structure, provenance
+
+
+@pytest.fixture
+def ideal(cfg):
+    return load_fixture(cfg, "ideal")
+
+
+@pytest.fixture
+def stretched(cfg):
+    return load_fixture(cfg, "stretched")
+
+
+@pytest.fixture
+def mixed(cfg):
+    return load_fixture(cfg, "mixed")
+
+
+@pytest.fixture
+def gated(cfg):
+    return load_fixture(cfg, "gated")

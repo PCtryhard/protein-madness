@@ -1,0 +1,40 @@
+# Target spec for the hand-built scoring fixtures.
+#
+# Both bonds use acceptor_ideal_angle: 180, so the "ideal" fixture scores
+# exactly 1.0 on both terms and the arithmetic in the test is checkable by
+# eye. A real target's ideal is set by the acceptor's hybridisation; see
+# config/targets/5fqj.yaml.
+
+name: fixture
+
+seeds:
+  - {id: fix, pdb: tests/fixtures/ideal.pdb, contigs: "20-20"}
+
+ligand:
+  id: 6NT
+  ccd: 6NT
+  smiles: null
+  reference_sdf: null
+
+motif:
+  fixed:
+    - {chain: A, resnum: 229}
+    - {chain: A, resnum: 291}
+
+hbonds:
+  - id: lig_n3_to_asp229_od2
+    donor:    {site: ligand,  atom: N3}
+    acceptor: {site: protein, chain: A, resnum: 229, atom: OD2}
+    acceptor_antecedent: {site: protein, chain: A, resnum: 229, atom: CG}
+    rotatable_donor: false
+    required: true
+    acceptor_ideal_angle: 180.0
+
+  - id: his291_ne2_to_lig_n1
+    donor:    {site: protein, chain: A, resnum: 291, atom: NE2}
+    donor_antecedent: {site: protein, chain: A, resnum: 291, atom: CD2}
+    acceptor: {site: ligand,  atom: N1}
+    acceptor_antecedent: {site: ligand, atom: N2}
+    rotatable_donor: false
+    required: true
+    acceptor_ideal_angle: 180.0

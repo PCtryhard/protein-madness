@@ -95,3 +95,60 @@ means nothing. The warning is the correct output.
 `pitch_assets.py` refuses such a table without `--allow-fake`.
 Why: on Sunday we change an input path, not plotting code. The stamp exists so
 a dry-run figure can never walk into the pitch deck.
+
+---
+
+**2026-11-21 — The pipeline is replaced by the motif-anchored one in `PIPELINE.md`; the whole previous pipeline moves to `outdated/`.**
+`src/`, `tests/`, `scripts/`, `configs/`, `notebooks/`, `BRIEF.md`, `EVOLVE.md`,
+`DESIGN_RATIONALE.md` and the Euler/Modal env files are now under `outdated/`.
+The new pipeline is one path — RFdiffusion partial diffusion, LigandMPNN,
+Boltz-2, hydrogen placement, scoring — with a per-scaffold elitist hill-climb
+over two branches.
+Why: the old pipeline ran and produced the baseline in `data/No_mutation_run/`,
+but it carried four fold backends, four compute backends and three scoring
+tiers, most of which were never exercised. It was too complex to build on. The
+new one is deliberately smaller and is the base to extend, not a reduction in
+ambition. `data/`, `runs/`, `RUNLOG.md` and this file stay live.
+
+**2026-11-21 — Residue numbering is tracked by four explicit maps, not normalised to 1..N.**
+Supersedes the 2026-11-16 entry on normalising to 1..N with a sidecar map. A
+hydrogen bond is declared once against seed numbering, keeps its string id
+forever, and its atoms are resolved through `Provenance`: seed → RFdiffusion
+output (from the `.trb` pickle), → LigandMPNN (identity, asserted), → Boltz-2
+(1..N in submitted order, computed from the exact submitted string), plus a
+ligand atom-name map.
+Why: normalising means every stage has to agree on one numbering, and the stages
+do not — RFdiffusion renumbers, Boltz-2 renumbers again from 1. Carrying the
+maps with the design makes each stage's renumbering explicit and assertable.
+The old rule's purpose is kept: nothing is inferred by proximity or alignment,
+and a residue that cannot be traced stops the run.
+
+**2026-11-21 — The angle term defaults to acceptor-side directionality for every bond, not the split by donor type.**
+`scoring.angle.rule: acceptor_side_always`. Both rules are implemented and the
+switch is one config line; `config.py` refuses `split_by_donor_type` combined
+with `protonation.engine: none`.
+Why three reasons, in order. (1) `RUNLOG.md` §3 shows the old scorer already
+measured `CG-OD2···N3` — acceptor-side — so the new default keeps the numbers
+comparable. (2) Both 5FQJ bonds have chemically fixed hydrogens (benzotriazole
+N3-H, imidazole NE2-H), so the split rule would measure `D-H···A` on both and
+require the protonation stage for both; its advantage on rotatable donors buys
+nothing here while adding an OpenMM/PDBFixer dependency. (3) `PIPELINE.md` calls
+it the option that loses least to tooling artefacts. This is one of the two
+questions that document left open; the other, `eval_replicates`, is still open
+and is phase 0's to answer with data.
+
+**2026-11-21 — The ligand heavy-atom count is a lookup table that raises on an unknown code, not an estimate.**
+`KNOWN_LIGAND_ATOM_COUNTS` in `src/stages/boltz.py`. 6NT is 12, counted from
+`data/5A_5FQJ.pdb` and cross-checked against a real Boltz-2 prediction by a test.
+Why: `boltz.max_tokens` is the only guard against an OOM that kills a worker
+mid-search, and on Linux there is no CPU fallback. A guessed input makes the
+guard worthless, so an unrecognised ligand refuses rather than estimating.
+
+**2026-11-21 — `resume` and `protonation.engine: reduce` refuse rather than half-work.**
+Both raise with an explanation of what is missing.
+Why: `resume` would have to rebuild a scaffold's patience counter from stored
+rows, and a resume that silently restarts the patience clock changes where the
+search stops. `reduce` writes its whole PDB to stdout while `run_command` keeps
+only the tail, so wiring it up naively would write a truncated structure and
+every angle measured on it would be wrong. A loud refusal costs an hour; either
+of those costs a run.

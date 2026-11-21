@@ -1,8 +1,13 @@
-# results are shared out-of-band (see ONBOARDING.md), never committed
-results/*
-!results/.gitkeep
+# run outputs: structures and sqlite files are large and regenerable.
+# hardware_notes.md and report.md are findings, not output -- commit those
+# deliberately with `git add -f`.
+runs/*/structures/
+runs/*/*.db
+runs/*/*.db-wal
+runs/*/*.db-shm
+runs/*/stages.jsonl
 
-# model weights and databases never go in git (see MANIFEST.md)
+# model weights and databases never go in git
 weights/
 *.pt
 *.pth
@@ -13,9 +18,9 @@ weights/
 *.ffindex
 *.ffdata
 
-# the real target config is created Saturday; commit it deliberately with -f if wanted
-# (the example stays tracked)
-configs/target.local.yaml
+# a local target or pipeline override; the committed ones stay tracked
+config/pipeline.local.yaml
+config/targets/*.local.yaml
 
 # python
 __pycache__/

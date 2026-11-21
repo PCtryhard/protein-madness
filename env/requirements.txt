@@ -1,13 +1,25 @@
-# Core (CPU) environment. Exact pins; resolved and tested on Python 3.12.10.
-# Everything the CPU smoke test needs is in this file and nothing else.
-# GPU model stacks are NOT here: each backend pins its own (env/modal_image.py,
-# env/euler_setup.sh) because their torch/CUDA builds differ.
+# CPU environment: everything `pytest` and the no-GPU CLI subcommands
+# (`smoke`, `measure`, `report`) need, and nothing else.
+#
+# GPU model stacks are deliberately NOT here. RFdiffusion, LigandMPNN and
+# Boltz-2 pin incompatible torch/CUDA builds, so each is installed separately
+# on the cluster and reached through the paths in config/pipeline.yaml.
+#
+# Resolved and tested on Python 3.12.10.
+
 numpy==1.26.4
-pandas==3.0.6
-scipy==1.17.1
-biotite==1.8.0
-biopython==1.87
-matplotlib==3.11.2
 PyYAML==6.0.3
+pydantic==2.12.5
 pytest==9.2.0
-nbformat==5.11.1
+
+# --- optional, for specific config choices -------------------------------
+#
+# protonation.engine: pdbfixer   (only needed by scoring.angle.rule:
+#                                 split_by_donor_type; the shipped default
+#                                 rule needs no hydrogens at all)
+# pdbfixer==1.10.0
+# openmm==8.2.0
+#
+# ligand.ccd: null  i.e. the SMILES path, which needs a graph match to recover
+#                   atom names Boltz-2 does not preserve
+# rdkit==2025.3.3

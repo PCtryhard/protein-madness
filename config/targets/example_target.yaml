@@ -1,0 +1,64 @@
+# Schema reference. This is the example from PIPELINE.md, kept so the shape of
+# a target file is documented independently of any real target. It will not run
+# as-is: the seed PDBs do not exist.
+#
+# For the real target see config/targets/5fqj.yaml.
+#
+# Everything downstream refers to a hydrogen bond by its string `id`, never by
+# residue number, because the numbers change and the id does not.
+#
+# On freezing: RFdiffusion holds whole residues, not individual atoms. Motif
+# scaffolding fixes residues named in a contig string, and partial diffusion
+# re-noises and re-denoises the whole structure. The spec below therefore fixes
+# whole residues.
+
+name: example_target
+
+seeds:
+  - {id: seed_a, pdb: inputs/seed_a.pdb, contigs: "20-40/A45-49/10-30/A102-102/20-40"}
+  - {id: seed_b, pdb: inputs/seed_b.pdb, contigs: "20-40/A45-49/10-30/A102-102/20-40"}
+  - {id: seed_c, pdb: inputs/seed_c.pdb, contigs: "20-40/A45-49/10-30/A102-102/20-40"}
+
+ligand:
+  id: LIG
+  ccd: null                            # prefer a CCD code whenever one exists
+  smiles: "CC(=O)Nc1ccccc1"            # used only when ccd is null
+  reference_sdf: inputs/lig_named.sdf  # authoritative atom names for the SMILES path
+
+motif:
+  fixed:                               # whole residues, never mutated, never redesigned
+    - {chain: A, resnum: 45}
+    - {chain: A, resnum: 46}
+    - {chain: A, resnum: 49}
+    - {chain: A, resnum: 102}
+
+hbonds:
+  - id: lig_n3_to_asp45_od1
+    donor:     {site: ligand,  atom: N3}
+    acceptor:  {site: protein, chain: A, resnum: 45, atom: OD1}
+    acceptor_antecedent: {site: protein, chain: A, resnum: 45, atom: CG}
+    rotatable_donor: false             # amide N-H, H position is determined
+    required: true
+    # Needed because the shipped scoring.angle.rule is acceptor_side_always,
+    # under which EVERY bond is measured at the acceptor and so every bond
+    # needs its own ideal. 120 deg is the sp2 carboxylate value; for a real
+    # target, measure it in the seed structure instead of taking the textbook
+    # number -- see config/targets/5fqj.yaml. Under
+    # rule: split_by_donor_type this bond would be measured D-H...A against
+    # 180 deg and this line would be unused.
+    acceptor_ideal_angle: 120.0
+
+  - id: ser49_og_to_lig_o1
+    donor:     {site: protein, chain: A, resnum: 49, atom: OG}
+    donor_antecedent: {site: protein, chain: A, resnum: 49, atom: CB}
+    acceptor:  {site: ligand,  atom: O1}
+    # The atom on the far side of the acceptor, needed to measure
+    # directionality AT the acceptor. For the carbonyl O1 of
+    # CC(=O)Nc1ccccc1 that is the carbonyl carbon. This bond is measured at
+    # the acceptor under BOTH rules -- acceptor_side_always by definition, and
+    # split_by_donor_type because rotatable_donor is true -- so this line is
+    # never optional.
+    acceptor_antecedent: {site: ligand, atom: C1}
+    rotatable_donor: true              # hydroxyl, H position is chosen by the protonator
+    required: true
+    acceptor_ideal_angle: 120.0        # lone-pair directionality, see Hydrogens

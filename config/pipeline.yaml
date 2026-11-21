@@ -1,0 +1,87 @@
+# Every tunable in the pipeline. Single source of truth.
+#
+# A numeric literal inside a scoring function or a stage wrapper is a bug.
+# The review for each build phase greps for one. If you need a new number,
+# add it here with a comment giving its range and a centre value.
+#
+# Target-specific things (seeds, motif, H-bonds, ligand) are NOT here:
+# they live in config/targets/<name>.yaml. Keep it that way.
+
+run:
+  name: null                   # set per run, on the command line
+  seed: 0
+  gpus: [0, 1]
+  max_cycles: 12               # range 5-30 (12)
+  patience: 2                  # cycles without improvement before a scaffold stops
+  min_delta: 0.005             # smallest score gain that counts as improvement
+  eval_replicates: 1           # Boltz-2 seeds averaged per design; range 1-5 (1)
+
+rfdiffusion:
+  run_inference: /path/to/RFdiffusion/scripts/run_inference.py
+  ckpt: Base_ckpt.pt
+  partial_T: 10                # re-noising timesteps; range 2-20 (10)
+  diffuser_T: 50               # full trajectory length; range 25-100 (50)
+  designs_per_parent: 4        # range 2-16 (4)
+  extra_args: []
+
+ligandmpnn:
+  run_script: /path/to/LigandMPNN/run.py
+  checkpoint: ligandmpnn_v_32_010_25.pt
+  temperature: 0.1             # range 0.05-0.3 (0.1)
+  sequences_per_backbone: 4    # range 1-8 (4)
+  omit_AA: "CX"
+  pack_side_chains: false
+
+boltz:
+  binary: boltz
+  cache_dir: ~/.boltz
+  recycling_steps: 3           # range 1-5 (3); cut second on OOM
+  diffusion_samples: 1         # range 1-5 (1); cut first on OOM
+  sampling_steps: 200          # range 50-200 (200)
+  use_potentials: false
+  no_kernels: true             # expected on sm_75; confirm in phase 0
+  precision: "32"              # bf16 unsupported on Turing; confirm in phase 0
+  max_tokens: 400              # refuse to submit beyond this
+
+protonation:
+  engine: pdbfixer             # pdbfixer | reduce | none
+  ph: 7.0
+
+scoring:
+  weights:
+    confidence: 0.70           # range 0.5-0.9 (0.7)
+    geometry: 0.30
+  geometry_weights:
+    distance: 0.60             # fixed by spec
+    angle: 0.40                # fixed by spec
+  confidence:
+    metric: complex_ipde       # complex_ipde | iptm | ligand_iptm | motif_pae
+    ipde_best: 0.5             # angstrom, maps to 1.0
+    ipde_worst: 5.0            # angstrom, maps to 0.0
+  distance:
+    ideal: 2.9                 # angstrom, heavy-atom donor to acceptor; range 2.7-3.0
+    tolerated: 3.5             # angstrom, maps to 0.0; range 3.2-3.6 (3.5)
+    fail: 4.5                  # angstrom, any required bond beyond this zeroes the design
+  angle:
+    tolerance: 60.0            # degrees of deviation mapped to 0.0; range 30-70 (60)
+    # split_by_donor_type: the recommended rule. Fixed-H donors are measured
+    # D-H...A against 180 deg and need the protonation stage; rotatable-H donors
+    # are measured D_ant-D...A at the acceptor and do not.
+    # acceptor_side_always: the conservative rule. Every bond is measured at the
+    # acceptor, no hydrogens are needed anywhere, and the protonation stage is
+    # skipped. See PIPELINE.md, "Hydrogens and the 180 degree criterion".
+    rule: acceptor_side_always   # split_by_donor_type | acceptor_side_always
+  aggregate: mean              # mean | min across the named bonds
+
+search:
+  keep_per_cycle: 2            # frontier size per scaffold; range 1-5 (2)
+  wiggle:
+    enabled: true
+    parents_per_cycle: 4       # range 1-8 (4)
+    source: rfdiffusion_backbone   # rfdiffusion_backbone | boltz_prediction
+  mutate:
+    enabled: true
+    parents_per_cycle: 2       # range 1-4 (2)
+    shell_radius: 5.0          # angstrom from ligand; range 4-8 (5)
+    alphabet: "ADEFGHIKLMNQRSTVWY"
+    max_mutants_per_parent: 80 # range 20-250 (80)
