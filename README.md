@@ -154,6 +154,8 @@ metric whose inputs are missing is `NaN` with a note, or raises — never 0.0.
   the plan. Start here.
 - **[EVOLVE.md](EVOLVE.md)** — how to run the design loop, for both the de novo
   and partial-diffusion arms.
+- **[RUNLOG.md](RUNLOG.md)** — what we actually ran and what it measured.
+  `BRIEF.md` is the plan; this is the evidence.
 - [DECISIONS.md](DECISIONS.md) — append-only: what we decided and why. Still in
   use; add to it rather than editing old entries.
 

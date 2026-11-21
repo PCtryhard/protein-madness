@@ -118,3 +118,42 @@ def test_rfd3_command_refuses_an_empty_key_list():
     """Without json_keys_subset RFD3 runs every entry in the file."""
     with pytest.raises(ValueError, match="json_keys_subset"):
         rfd3_command("Kemp.json", [], "out")
+
+
+# ------------------------------------------- extra-contact conditioning arm
+
+def test_extra_contacts_leaves_the_scored_geometry_alone():
+    """The judges measure ASP OD2->N3 and GLN NE2->N1. Adding conditioning must
+    not disturb either, or we trade a known metric for an unproven one."""
+    from src.generate.rfd3 import denovo_extra_contacts
+
+    plain = denovo("a").as_entry()
+    extra = denovo_extra_contacts("b").as_entry()
+    assert extra["select_fixed_atoms"][KEMP_BASE] == plain["select_fixed_atoms"][KEMP_BASE]
+    assert extra["select_fixed_atoms"][KEMP_DONOR] == plain["select_fixed_atoms"][KEMP_DONOR]
+    assert extra["select_fixed_atoms"][KEMP_LIGAND] == "ALL"
+    assert extra["contig"] == plain["contig"]
+
+
+def test_extra_contacts_targets_the_unengaged_nitro_oxygens():
+    from src.generate.rfd3 import NITRO_OXYGENS, denovo_extra_contacts
+
+    entry = denovo_extra_contacts("b").as_entry()
+    assert entry["select_hbond_acceptor"] == {KEMP_LIGAND: ",".join(NITRO_OXYGENS)}
+    assert entry["select_buried"] == KEMP_BASE
+
+
+def test_extra_contacts_rejects_atoms_that_are_not_on_the_ligand():
+    """A typo'd atom name would silently condition on nothing."""
+    from src.generate.rfd3 import denovo_extra_contacts
+
+    with pytest.raises(ValueError, match="not 6NT atoms"):
+        denovo_extra_contacts("b", acceptors=("OXX",))
+
+
+def test_extra_contacts_can_be_switched_off():
+    from src.generate.rfd3 import denovo_extra_contacts
+
+    entry = denovo_extra_contacts("b", acceptors=(), bury_base=False).as_entry()
+    assert "select_hbond_acceptor" not in entry
+    assert "select_buried" not in entry
