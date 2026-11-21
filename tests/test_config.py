@@ -7,6 +7,7 @@ grep, as a test.
 
 from __future__ import annotations
 
+import pathlib
 from pathlib import Path
 
 import pytest
@@ -74,9 +75,10 @@ def test_shipped_targets_also_load_under_the_other_angle_rule(pipeline_path, tar
 
 
 def test_real_target_cross_validates_against_the_real_pipeline(pipeline_path):
-    """The pairing that actually runs: 5fqj under the shipped angle rule."""
+    """The pairing that actually runs: the reference variant under the shipped
+    angle rule. tests/paths.REAL_TARGET names which variant that is."""
     cfg = load(pipeline_path, ROOT / REAL_TARGET)
-    assert cfg.target.name == "01_his_asp"
+    assert cfg.target.name == pathlib.Path(REAL_TARGET).stem
     for bond in cfg.target.hbonds:
         bond.validate_for_rule(cfg.pipeline.scoring.angle.rule)
 

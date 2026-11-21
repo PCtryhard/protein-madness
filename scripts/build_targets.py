@@ -107,6 +107,13 @@ CHEMISTRY_ANGLES = {
 ANGLE_SANE_MIN = 90.0
 ANGLE_SANE_MAX = 180.0
 
+# A seed whose required contact is further than this is not a motif at all --
+# the residues and the ligand are not interacting. Scaffolding from it would
+# ask RFdiffusion to reproduce a geometry in which nothing touches, so the
+# target is refused rather than generated with a stand-in ideal. Far beyond any
+# hydrogen bond, so it cannot fire on a merely poor seed.
+SEED_UNUSABLE_DISTANCE = 10.0
+
 LIGAND_NAME = "6NT"
 LIGAND_RESNAME = "6NT"
 
@@ -342,6 +349,22 @@ def measure(plans: list[BondPlan], pdb: Path, clash: float, tolerated: float) ->
             )
 
 
+def unusable_bonds(plans: list[BondPlan]) -> list[BondPlan]:
+    """Required bonds whose seed geometry means the motif is not a motif.
+
+    Distinct from a fallback ideal: a 1.7 A clash or a 3.9 A stretch is a bad
+    contact that RFdiffusion can still be asked to improve, and the crystal or
+    the chemistry supplies a target. A 25 A separation is not a contact, and
+    nothing downstream can rescue it.
+    """
+    return [
+        p for p in plans
+        if p.required
+        and p.distance is not None
+        and p.distance > SEED_UNUSABLE_DISTANCE
+    ]
+
+
 def render(variant: str, label: str, pdb: Path, residues: dict[int, str],
            plans: list[BondPlan]) -> str:
     positions = sorted(residues)
@@ -524,6 +547,7 @@ def main() -> int:
 
     stale: list[str] = []
     rows: list[tuple[str, BondPlan]] = []
+    unusable: list[tuple[str, Path, list[BondPlan]]] = []
 
     for folder, pdb in discover(args.inputs):
         label = pdb.stem[3:].strip("_") or "motif"
@@ -532,6 +556,11 @@ def main() -> int:
         plans = plan_bonds(residues)
         measure(plans, pdb, distance.clash, distance.tolerated)
         rows.extend((folder.name, p) for p in plans)
+
+        broken = unusable_bonds(plans)
+        if broken:
+            unusable.append((folder.name, pdb, broken))
+            continue
 
         out = TARGETS / f"{folder.name}_{label}.yaml"
         text = render(folder.name, label, pdb, residues, plans)
@@ -598,13 +627,54 @@ def main() -> int:
             print("  a number nobody checked.")
         print()
 
+    if unusable:
+        print()
+        print("=" * 72, file=sys.stderr)
+        print(f"REFUSED {len(unusable)} variant(s): the seed is not a motif",
+              file=sys.stderr)
+        print("=" * 72, file=sys.stderr)
+        for variant, pdb, broken in unusable:
+            print(file=sys.stderr)
+            print(f"  {variant}  {pdb}", file=sys.stderr)
+            for plan in broken:
+                print(f"    {plan.bond_id}: {plan.distance:.1f} A "
+                      f"between {plan.donor_atom} and {plan.acceptor_atom}",
+                      file=sys.stderr)
+        print(f"""
+A required contact further than {SEED_UNUSABLE_DISTANCE} A means the motif
+residues and the ligand are not interacting in that file. No ideal angle can
+fix it: RFdiffusion would be asked to scaffold a constellation in which nothing
+touches, and every design from it would be meaningless.
+
+No target file was written for those variants, so the previous one -- if any --
+is still in place and still points at this seed. Check the seed before running.
+
+Two things that produce exactly this, worth ruling out in order:
+
+  1. The protein and the ligand are in different coordinate frames. If the
+     protein coordinates came from a prediction and the ligand was carried over
+     from the crystal (or vice versa) without superposing the two, the file is
+     internally inconsistent. The B-factor columns are a clue: a per-residue
+     uniform value is a predicted pLDDT, a per-atom varying value is usually
+     crystallographic.
+
+  2. The prediction genuinely lost the ligand. This is the failure RUNLOG.md
+     section 1 records -- a motif held to 0.013 A at design time and the ligand
+     11.18 A away after re-prediction. If that is what happened, the file is a
+     faithful extraction of a bad prediction, and the news is about the
+     approach rather than about the file.
+
+Either way the fix is upstream of this repo.""", file=sys.stderr)
+
     if args.check:
         if stale:
             print("out of date (run `python scripts/build_targets.py`): "
                   + ", ".join(stale), file=sys.stderr)
             return 1
+        if unusable:
+            return 1
         print("all target files are current")
-    return 0
+    return 1 if unusable else 0
 
 
 if __name__ == "__main__":

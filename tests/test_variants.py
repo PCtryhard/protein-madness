@@ -122,16 +122,46 @@ def test_only_variant_01_lacks_the_nitro_histidine(pipeline_path):
     assert without == ["01_his_asp"]
 
 
-def test_variant_01_carries_the_crystal_geometry(pipeline_path):
-    """01 is the only variant with no modelled mutation, so its two contacts
-    are the real 5FQJ values and its ideals match them exactly."""
-    _, _, by_id = _measure(pipeline_path, "config/targets/01_his_asp.yaml")
+def test_every_seed_is_usable(pipeline_path):
+    """Every variant's motif residues must actually touch its ligand.
+
+    THIS IS A DATA CHECK, NOT A CODE CHECK. It goes red when a seed file is
+    replaced with one whose ligand is not in the pocket, which is exactly what
+    happened to variants 01-03: their refolded pockets put the motif 25-39 A
+    from the ligand. Fix the seed, not the test -- and see the refusal that
+    `python scripts/build_targets.py` prints for the two likely causes.
+    """
+    module = _build_targets_module()
+    broken = {}
+    for target in variant_targets():
+        cfg, _, by_id = _measure(pipeline_path, target)
+        far = [
+            (m.bond_id, m.distance)
+            for m in by_id.values()
+            if m.required and m.distance > module.SEED_UNUSABLE_DISTANCE
+        ]
+        if far:
+            broken[cfg.target.name] = far
+    assert not broken, (
+        "these seeds have required contacts beyond "
+        f"{module.SEED_UNUSABLE_DISTANCE} A, so the motif and the ligand are "
+        "not interacting:\n"
+        + "\n".join(
+            f"  {name}: "
+            + ", ".join(f"{bond} at {dist:.1f} A" for bond, dist in far)
+            for name, far in sorted(broken.items())
+        )
+    )
+
+
+def test_the_unmutated_base_contact_is_crystal_geometry(pipeline_path):
+    """Wherever ASP229 has not been refolded, its contact is the real 5FQJ
+    value. Variant 04 is the reference; 01-03 were replaced by refolds whose
+    ligand is 25 A away, which test_every_seed_is_usable covers."""
+    _, _, by_id = _measure(pipeline_path, "config/targets/04_gln_asp_his.yaml")
     base = by_id["lig_n3_to_asp229_od2"]
-    donor = by_id["his291_ne2_to_lig_n1"]
     assert base.distance == pytest.approx(2.734, abs=0.005)
     assert base.angle == pytest.approx(106.6, abs=0.1)
-    assert donor.distance == pytest.approx(3.084, abs=0.005)
-    assert donor.angle == pytest.approx(126.6, abs=0.1)
 
 
 def test_the_modelled_mutations_really_do_clash(pipeline_path):
@@ -147,11 +177,11 @@ def test_the_modelled_mutations_really_do_clash(pipeline_path):
     assert by_id["his261_ne2_to_lig_o11"].distance == pytest.approx(1.820, abs=0.005)
 
 
-def test_the_asn_variants_point_the_donor_away(pipeline_path):
-    """ASN291 ND2 sits 4.823 A from the ligand N1 in the seed -- past the 4.5 A
-    fail threshold. The seed is never scored, but it says plainly that these
-    two variants start with no donor contact at all."""
-    _, _, by_id = _measure(pipeline_path, "config/targets/03_asn_asp_his.yaml")
+def test_the_asn_variant_points_the_donor_away(pipeline_path):
+    """ASN291 ND2 sits 4.823 A from the ligand N1 in the un-refolded seed --
+    past the 4.5 A fail threshold. The seed is never scored, but it says
+    plainly that this variant starts with no donor contact at all."""
+    _, _, by_id = _measure(pipeline_path, "config/targets/06_asn_glu_his.yaml")
     assert by_id["asn291_nd2_to_lig_n1"].distance == pytest.approx(4.823, abs=0.005)
 
 
@@ -166,17 +196,22 @@ def test_a_clashing_seed_would_gate_if_it_were_a_design(pipeline_path):
     assert score.total == 0.0
 
 
-def test_generated_targets_are_up_to_date():
-    """`build_targets.py --check` must pass, so an edit to the generator that
-    was never re-run cannot slip through."""
+def test_generated_targets_are_not_stale():
+    """No target file may differ from what the generator would write now.
+
+    Deliberately tolerant of the generator REFUSING a variant: a refused seed
+    is a data problem that test_every_seed_is_usable reports, and failing here
+    for it too would just make one problem look like two. What this catches is
+    the different problem of an edit to the generator that was never re-run.
+    """
     result = subprocess.run(
         [sys.executable, "scripts/build_targets.py", "--check"],
         cwd=ROOT, capture_output=True, text=True, check=False,
     )
-    assert result.returncode == 0, (
-        "config/targets/ is out of date; run `python scripts/build_targets.py`\n"
-        + result.stdout
-        + result.stderr
+    combined = result.stdout + result.stderr
+    assert "out of date" not in combined, (
+        "config/targets/ is stale; run `python scripts/build_targets.py`\n"
+        + combined
     )
 
 
@@ -216,7 +251,8 @@ def test_generator_prefers_measured_when_the_seed_is_clean(tmp_path, pipeline):
     """The refold handoff, in one test: a seed whose contacts are real H-bonds
     yields `measured` ideals taken from that seed."""
     module = _build_targets_module()
-    source = ROOT / "data" / "01" / "inputs" / "5fqj-6cf4761" / "01_his_asp_.pdb"
+    source = (ROOT / "data" / "04" / "inputs" / "5fqj-6cf4761"
+              / "04_gln_asp_his.pdb")
     clean = tmp_path / "clean.pdb"
     clean.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
 
@@ -225,10 +261,11 @@ def test_generator_prefers_measured_when_the_seed_is_clean(tmp_path, pipeline):
     module.measure(plans, clean, pipeline.scoring.distance.clash,
                    pipeline.scoring.distance.tolerated)
 
-    # Variant 01's two contacts are genuine crystal H-bonds, so both are
-    # measured and the ideal equals what was measured.
-    assert {p.source for p in plans} == {"measured"}
-    for plan in plans:
+    # Wherever a contact is a plausible H-bond, the ideal is what was
+    # measured in the seed rather than a stand-in.
+    measured = [p for p in plans if p.source == "measured"]
+    assert measured, "variant 04's base contact is crystal geometry"
+    for plan in measured:
         assert plan.ideal == pytest.approx(plan.measured_angle, abs=0.05)
 
 
@@ -260,7 +297,8 @@ def test_generator_flags_a_plausible_distance_with_an_implausible_angle(
     import numpy as np
 
     module = _build_targets_module()
-    source = ROOT / "data" / "01" / "inputs" / "5fqj-6cf4761" / "01_his_asp_.pdb"
+    source = (ROOT / "data" / "04" / "inputs" / "5fqj-6cf4761"
+              / "04_gln_asp_his.pdb")
     lines = source.read_text(encoding="utf-8").splitlines()
 
     def xyz(line):
@@ -305,3 +343,50 @@ def test_an_unknown_residue_type_is_a_hard_error(tmp_path, pipeline):
     residues = {229: "ASP", 291: "TRP"}      # TRP is not a known donor here
     with pytest.raises(SystemExit, match="chemistry table"):
         module.plan_bonds(residues)
+
+
+def test_a_seed_whose_ligand_is_far_away_is_refused(tmp_path, pipeline):
+    """A required contact at 25 A is not a bad contact, it is not a contact.
+    No stand-in ideal can rescue it, so the target must not be generated.
+
+    This fired for real: the first refolded pockets for variants 01-03 had
+    their motif residues 25-39 A from the ligand, and without this they would
+    have produced seven runnable-looking targets, three of which asked
+    RFdiffusion to scaffold a constellation in which nothing touches.
+    """
+    import numpy as np
+
+    module = _build_targets_module()
+    source = ROOT / "data" / "04" / "inputs" / "5fqj-6cf4761" / "04_gln_asp_his.pdb"
+    lines = source.read_text(encoding="utf-8").splitlines()
+    out = []
+    for line in lines:
+        if line.startswith("HETATM") and line[17:20].strip() == "6NT":
+            # translate the ligand 30 A away, leaving the protein where it is
+            xyz = np.array([float(line[30:38]), float(line[38:46]),
+                            float(line[46:54])]) + np.array([30.0, 0.0, 0.0])
+            line = line[:30] + f"{xyz[0]:8.3f}{xyz[1]:8.3f}{xyz[2]:8.3f}" + line[54:]
+        out.append(line)
+    far = tmp_path / "far.pdb"
+    far.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+    residues = module.read_motif(far)
+    plans = module.plan_bonds(residues)
+    module.measure(plans, far, pipeline.scoring.distance.clash,
+                   pipeline.scoring.distance.tolerated)
+
+    broken = module.unusable_bonds(plans)
+    assert broken, "a 30 A displacement should make the seed unusable"
+    assert all(p.required for p in broken), "only required bonds can make it unusable"
+
+
+def test_a_merely_bad_seed_is_not_refused(tmp_path, pipeline):
+    """The distinction that matters: a 1.7 A clash or a 3.9 A stretch is a bad
+    contact RFdiffusion can be asked to improve, and it still generates."""
+    module = _build_targets_module()
+    source = ROOT / "data" / "05" / "inputs" / "5fqj-6cf4761" / "05_his_glu_his.pdb"
+    residues = module.read_motif(source)
+    plans = module.plan_bonds(residues)
+    module.measure(plans, source, pipeline.scoring.distance.clash,
+                   pipeline.scoring.distance.tolerated)
+    assert module.unusable_bonds(plans) == []

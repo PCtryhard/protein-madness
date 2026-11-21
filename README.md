@@ -18,7 +18,7 @@ score stops improving.
 
 ```bash
 python -m src.cli smoke --target config/targets/01_his_asp.yaml   # validate, no GPU
-python -m pytest -q                                               # 288 tests, no GPU
+python -m pytest -q                                               # 291 tests; 1 fails on purpose, see below
 python cluster/preflight.py                                       # can this box run it?
 python scripts/noise_control.py --from-csv                        # is the score signal?
 ```
@@ -311,7 +311,21 @@ variant, generated from the PDBs:
 python scripts/build_targets.py
 ```
 
-**Only variant 01 carries crystal geometry.** Its two contacts are the real
+> **Variants 01-03 currently have unusable seeds.** Their refolded pockets
+> (`ab35019`, "Update mutant pockets 01-03 from Boltz-2") put the motif
+> residues **25-39 Å** from the ligand, so the two are not interacting at all.
+> `scripts/build_targets.py` refuses to generate those three targets and
+> `tests/test_variants.py::test_every_seed_is_usable` fails on purpose until
+> the seeds are fixed. Variants **04-07 are runnable** today.
+>
+> Two causes produce exactly this, worth ruling out in order: the protein and
+> ligand ending up in different coordinate frames (the protein half of those
+> files carries per-residue uniform B-factors, i.e. a predicted pLDDT, while
+> the ligand carries per-atom values), or the prediction genuinely losing the
+> ligand — the failure `RUNLOG.md` §1 records at 11.18 Å. The fix is upstream
+> of this repo either way.
+
+**Of the un-refolded seeds, only the ASP229 contact carries crystal geometry.** Its two contacts are the real
 5FQJ values — ASP229 `OD2`···`N3` at 2.734 Å / 106.6°, HIS291 `NE2`···`N1` at
 3.084 Å / 126.6°. Every mutated or added residue in 02–07 was modelled in
 without repacking and its atoms land on top of the ligand:

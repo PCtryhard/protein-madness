@@ -18,12 +18,17 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"
 TARGETS_DIR = ROOT / "config" / "targets"
 
-# The reference real target and its seed. Variant 01 is the one whose two
-# contacts are genuine 5FQJ crystal geometry -- 02..07 carry modelled
-# mutations that clash with the ligand -- so it is the variant the geometry
-# assertions are written against.
-REAL_TARGET = "config/targets/01_his_asp.yaml"
-REAL_SEED = ROOT / "data" / "01" / "inputs" / "5fqj-6cf4761" / "01_his_asp_.pdb"
+# The reference real target and its seed: the variant whose ASP229 contact is
+# still genuine 5FQJ crystal geometry, 2.734 A at 106.6 deg.
+#
+# This was variant 01 until its pocket was replaced with a refold whose ligand
+# sits 25 A from the motif. Variant 04 kept the crystal base contact, so the
+# geometry assertions moved there. If 04 is ever refolded too, move this and
+# re-measure rather than loosening the assertions.
+REAL_TARGET = "config/targets/04_gln_asp_his.yaml"
+REAL_SEED = (
+    ROOT / "data" / "04" / "inputs" / "5fqj-6cf4761" / "04_gln_asp_his.pdb"
+)
 
 EXAMPLE_TARGET = "config/targets/example_target.yaml"
 

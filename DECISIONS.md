@@ -299,3 +299,26 @@ complete on disk while the next design is still folding.
 Why: they are one row per design, they are the result, and the previous pipeline
 committed `leaderboard.csv` the same way. `progress.txt` is transient and is
 ignored, as are the structures, the sqlite files and the slurm logs.
+
+---
+
+**2026-11-21 — A seed whose required contact exceeds 10 Å is refused, not given a stand-in ideal.**
+`SEED_UNUSABLE_DISTANCE` in `scripts/build_targets.py`. The generator writes the
+good variants, refuses the bad ones, explains why, and exits non-zero.
+Why: the first refolded pockets for variants 01–03 arrived with their motif
+residues 25–39 Å from the ligand. Without this the generator would have fallen
+back to crystal and chemistry ideals and produced seven runnable-looking
+targets, three of which ask RFdiffusion to scaffold a constellation in which
+nothing touches. The distinction that matters: a 1.7 Å clash or a 3.9 Å stretch
+is a bad contact a design can improve on, and a stand-in ideal is the right
+answer; a 25 Å separation is not a contact and nothing downstream can rescue it.
+
+**2026-11-21 — `test_every_seed_is_usable` is allowed to stay red while the data is broken.**
+It is a data check, not a code check, and it currently fails naming variants
+01–03 and their distances.
+Why: hiding it would mean the only signal was a line in a generator's output
+that nobody re-reads. `test_generated_targets_are_not_stale` was deliberately
+made tolerant of a refusal so that one data problem does not show up as two
+failures. The reference target for the geometry assertions moved from variant
+01 to variant 04, which still has the crystal ASP229 contact; `tests/paths.py`
+names it in one place.
