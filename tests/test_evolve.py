@@ -443,3 +443,26 @@ def test_config_round_trips(tmp_path):
     assert restored.catalytic == config.catalytic
     assert restored.base_position == config.base_position
     assert restored.site().base_position == 10
+
+
+def test_fold_script_refuses_output_inside_the_input_directory(tmp_path):
+    """Regression: Boltz scans the input dir and refuses a subdirectory in it.
+    This exact mistake wasted a 48-design batch on the first real run."""
+    with pytest.raises(ValueError, match="inside designs_dir"):
+        fold_batch.write_fold_script(
+            tmp_path / "f.sbatch", fold_batch.SiteProfile.euler(),
+            "/work/chunk_a", "/work/chunk_a/boltz_seed1", [1],
+        )
+    with pytest.raises(ValueError, match="inside designs_dir"):
+        fold_batch.write_fold_script(
+            tmp_path / "f.sbatch", fold_batch.SiteProfile.euler(),
+            "/work/chunk_a", "/work/chunk_a", [1],
+        )
+
+
+def test_fold_script_accepts_a_sibling_output_directory(tmp_path):
+    path = fold_batch.write_fold_script(
+        tmp_path / "f.sbatch", fold_batch.SiteProfile.euler(),
+        "/work/chunk_a", "/work/out_a", [1],
+    )
+    assert "/work/out_a" in path.read_text()

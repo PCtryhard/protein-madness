@@ -7,6 +7,7 @@ would tell us a design is novel exactly when we failed to look.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import pytest
 
@@ -104,3 +105,64 @@ def test_missing_foldseek_raises(tmp_path):
 
 def test_empty_query_set_is_not_an_error():
     assert max_sequence_identity({}) == {}
+
+
+# ------------------------------------------------- TM-score as a hard gate
+
+def test_tm_gate_kills_a_design_in_selection():
+    """Measured: 2 of our first 8 backbones failed at 0.703 / 0.705."""
+    from src.evolve.select import HardGates, passes_gates
+
+    aggregate = {
+        "base_to_ligand_a_mean": 4.0, "ipde_mean": 2.0,
+        "base_burial_ca_count_mean": 59.0,     # the BEST burial we measured...
+        "tm_score": 0.703, "tm_closest": "3I1C",
+    }
+    ok, reasons = passes_gates(aggregate, SEQ)
+    assert not ok, "a TM-score of 0.703 must not survive selection"
+    assert any("TM-score" in r and "3I1C" in r for r in reasons)
+    assert HardGates().max_tm_score == 0.70
+
+
+def test_tm_gate_opposes_burial_and_wins():
+    """The two best-buried backbones were the two ineligible ones, so the gate
+    must not be tradeable against a good burial score."""
+    from src.evolve.select import passes_gates
+
+    great_but_ineligible = {"base_to_ligand_a_mean": 3.0, "ipde_mean": 1.0,
+                            "base_burial_ca_count_mean": 59.0, "tm_score": 0.705}
+    worse_but_eligible = {"base_to_ligand_a_mean": 5.0, "ipde_mean": 2.5,
+                          "base_burial_ca_count_mean": 40.0, "tm_score": 0.499}
+    assert not passes_gates(great_but_ineligible, SEQ)[0]
+    assert passes_gates(worse_but_eligible, SEQ)[0]
+
+
+def test_unmeasured_tm_does_not_block_the_loop_but_is_not_a_pass():
+    """During evolution an unmeasured TM-score cannot kill a design -- we would
+    never fold anything. It must still be visible as unchecked at submission."""
+    from src.evolve.select import passes_gates
+
+    aggregate = {"base_to_ligand_a_mean": 4.0, "ipde_mean": 2.0,
+                 "base_burial_ca_count_mean": 40.0}
+    assert passes_gates(aggregate, SEQ)[0]
+    assert assess("d1", SEQ, identity=0.0).unchecked == ["TM-score"]
+
+
+def test_tm_at_exactly_the_limit_still_qualifies():
+    from src.evolve.select import passes_gates
+    aggregate = {"base_to_ligand_a_mean": 4.0, "ipde_mean": 2.0,
+                 "base_burial_ca_count_mean": 40.0, "tm_score": 0.70}
+    assert passes_gates(aggregate, SEQ)[0]
+
+
+def test_reference_set_is_defined_by_search_not_hardcoded_ids():
+    """Auditable: anyone can re-run the queries and get the same set."""
+    from src.score.eligibility import KEMP_SEARCH_TERMS
+    assert "Kemp eliminase" in KEMP_SEARCH_TERMS
+    assert all(isinstance(t, str) and t for t in KEMP_SEARCH_TERMS)
+
+
+def test_max_tm_vs_empty_set_raises():
+    from src.score.eligibility import max_tm_vs_set
+    with pytest.raises(ToolUnavailable, match="empty reference set"):
+        max_tm_vs_set(Path("x.pdb"), [])

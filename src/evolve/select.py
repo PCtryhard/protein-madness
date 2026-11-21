@@ -31,9 +31,22 @@ import numpy as np
 
 log = logging.getLogger("pipeline.evolve.select")
 
-#: Target distance for a productive contact. Below this, no penalty: the
-#: geometry is already as good as the metric can see.
+#: Upper edge of a productive contact. Beyond this the interaction is too weak.
 IDEAL_CONTACT_A = 3.5
+#: **Lower** edge. The scored contacts are hydrogen bonds - ASP OD2 to the
+#: acidic N3-H of the benzotriazole, GLN NE2 to N1 - and an O...N hydrogen bond
+#: does not get better indefinitely as it shortens. Below ~2.4 A you are into
+#: van der Waals repulsion, not a stronger bond. HG3.17 itself sits at 2.53 A.
+#:
+#: This floor matters: an earlier version penalised only long contacts, so a
+#: physically impossible 1.5 A contact scored as PERFECT. The organisers'
+#: slide describes their geometry term as comparing "against the ideal
+#: approach geometry", which is a deviation from a target, not a one-sided
+#: "closer is better" - so one-sided was likely wrong about their metric too.
+MIN_CONTACT_A = 2.4
+#: Being too close is worse than being slightly too far: a clash destabilises
+#: the complex, while a long contact is merely weak.
+TOO_CLOSE_MULTIPLIER = 2.0
 
 
 @dataclass(frozen=True)
@@ -48,22 +61,69 @@ class FitnessWeights:
     ipde: float = 0.5
     #: Burial shortfall below the target, per CA atom.
     burial: float = 0.05
-    #: Target burial. The reference design scores 30; aim above it.
-    burial_target: float = 35.0
+    #: Target burial. **Measured on a real enzyme**: HG3.17 (4BS0) buries its
+    #: catalytic aspartate with 47 CA atoms inside 12 A, and its Q50A variant
+    #: (6SS1) with 48. The organisers' de novo reference design manages only
+    #: 30. Aiming at the real enzyme is better founded than aiming just above
+    #: a design we already know fails.
+    burial_target: float = 47.0
+    #: Approach angles, per 10 degrees off ideal. Deliberately well below the
+    #: distance weights: a mentor's framing, and the right one -- distance is
+    #: the dominant signal and angle is a tie-breaker between designs that
+    #: already sit at a sensible distance.
+    angle: float = 0.15
+    #: Ideal approach angle, degrees. **Measured, not assumed**: HG3.17's own
+    #: crystal structure (PDB 4BS0, 1.09 A) sits at 130.9 deg for the base and
+    #: 133.6 deg for the donor. An earlier draft of this file guessed 120 deg
+    #: from sp2 geometry, which would have penalised the best known Kemp
+    #: eliminase by 11 deg for being correct.
+    ideal_angle_deg: float = 131.0
+    #: Angles this far off ideal cost nothing: within the flat part.
+    angle_tolerance_deg: float = 25.0
+
+    #: Stability. complex_plddt is 0-1; a design the model is unsure about is
+    #: one whose geometry we should not believe.
+    stability: float = 3.0
+    #: Below this pLDDT the fold is not credible enough to rank on.
+    plddt_floor: float = 0.70
+
+    #: "Amount of change": CA-RMSD between the structure we designed and the
+    #: one Boltz rebuilds from its sequence. Low change == the active site
+    #: survived re-prediction, which is the whole problem (BRIEF.md 1).
+    change: float = 0.4
+    #: Change below this is free - no design reproduces exactly.
+    change_tolerance_a: float = 1.5
+
     #: k in "mean - k * spread". Penalises designs that only work on one seed.
     spread: float = 1.0
 
 
-def contact_penalty(distance: float, ideal: float = IDEAL_CONTACT_A) -> float:
-    """Angstroms beyond the ideal approach distance. Zero if close enough.
+def contact_penalty(
+    distance: float,
+    ideal: float = IDEAL_CONTACT_A,
+    minimum: float = MIN_CONTACT_A,
+) -> float:
+    """Deviation from a productive hydrogen-bond distance, in angstroms.
 
-    One-sided on purpose: a contact at 3.0 A is not worse than one at 3.5 A for
-    any reason the scoring metric can see, and penalising it would push designs
-    towards a precision we have no evidence the judge rewards.
+    **Two-sided.** The window is ``[2.4, 3.5] A``: inside it costs nothing,
+    outside it costs the distance to the nearest edge, and being too close
+    costs double because a clash destabilises the complex while a long contact
+    is merely weak.
+
+    It is a *band*, not "closer is better". These contacts are hydrogen bonds,
+    and an O...N hydrogen bond stops improving somewhere around 2.5 A - below
+    that the atoms are simply overlapping. HG3.17, the most active Kemp
+    eliminase known, sits at 2.53 A, not at 1.5 A, and that is not an accident
+    of its evolution; it is where the optimum is.
     """
     if not math.isfinite(distance):
         return math.inf
-    return max(0.0, float(distance) - ideal)
+    d = float(distance)
+    if d > ideal:
+        return d - ideal
+    if d < minimum:
+        return (minimum - d) * TOO_CLOSE_MULTIPLIER
+    return 0.0
 
 
 def fitness(aggregate: dict, weights: FitnessWeights = FitnessWeights()) -> float:
@@ -85,6 +145,24 @@ def fitness(aggregate: dict, weights: FitnessWeights = FitnessWeights()) -> floa
     cost += weights.ipde * float(ipde)
     if math.isfinite(burial):
         cost += weights.burial * max(0.0, weights.burial_target - float(burial))
+
+    # Angles: secondary to distance, by weight. A contact at a sensible
+    # distance but pointing the wrong way is not a productive contact.
+    for key in ("base_angle_deg_mean", "donor_angle_deg_mean"):
+        angle = aggregate.get(key, math.nan)
+        if math.isfinite(angle):
+            off = abs(float(angle) - weights.ideal_angle_deg)
+            cost += weights.angle * max(0.0, off - weights.angle_tolerance_deg) / 10.0
+
+    # Stability: an unconfident fold is one whose geometry we should not trust.
+    plddt = aggregate.get("complex_plddt_mean", math.nan)
+    if math.isfinite(plddt):
+        cost += weights.stability * max(0.0, weights.plddt_floor - float(plddt))
+
+    # Amount of change between the design and its re-prediction.
+    change = aggregate.get("design_rmsd_a_mean", math.nan)
+    if math.isfinite(change):
+        cost += weights.change * max(0.0, float(change) - weights.change_tolerance_a)
 
     # Metric 4: penalise designs whose numbers move between seeds. A mediocre
     # mean with near-zero spread is a better bet than a brilliant outlier.
@@ -118,6 +196,12 @@ class HardGates:
     #: Severe clashes mean a strained pose the model will relieve by ejecting
     #: the ligand - the exact failure we are trying to fix.
     max_clash_pairs: int = 8
+    #: Eligibility: TM-score above this to a published structure disqualifies.
+    #: A hard gate, not a ranking term - no amount of good geometry rescues a
+    #: design that scores zero. Measured: 2 of our first 8 backbones failed it
+    #: at 0.703 and 0.705, and they were the two with the BEST burial, so this
+    #: actively opposes the burial term and must be enforced, not traded off.
+    max_tm_score: float = 0.70
 
 
 def passes_gates(aggregate: dict, sequence: str, gates: HardGates = HardGates()) -> tuple[bool, list[str]]:
@@ -133,6 +217,17 @@ def passes_gates(aggregate: dict, sequence: str, gates: HardGates = HardGates())
     burial = aggregate.get("base_burial_ca_count_mean", math.nan)
     if math.isfinite(burial) and burial < gates.min_burial:
         reasons.append(f"burial {burial:.0f} < {gates.min_burial}")
+
+    # Eligibility. A MEASURED violation kills the design here and now; an
+    # unmeasured TM-score is not treated as a pass - it is recorded so the
+    # submission builder can refuse it later. "We did not check" and "it is
+    # fine" must never look the same.
+    tm = aggregate.get("tm_score", math.nan)
+    if math.isfinite(tm) and tm > gates.max_tm_score:
+        reasons.append(
+            f"TM-score {tm:.3f} > {gates.max_tm_score} to "
+            f"{aggregate.get('tm_closest', 'a published structure')}: ineligible"
+        )
     return (not reasons), reasons
 
 

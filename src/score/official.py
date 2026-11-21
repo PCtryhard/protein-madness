@@ -77,6 +77,13 @@ class CatalyticSite:
     donor_atom: str = "NE2"
     donor_ligand_atom: str = "N1"
     ligand_resname: str = "6NT"
+    #: Third atom for the approach ANGLE at each contact: the atom the
+    #: contacting atom hangs off. For the aspartate carboxylate that is CG, for
+    #: the glutamine amide it is CD. The angle CG-OD2...N3 says whether the
+    #: carboxylate is *pointing at* the ligand or merely near it -- two designs
+    #: can share a 3 A distance and only one of them be productive.
+    base_root_atom: str = "CG"
+    donor_root_atom: str = "CD"
 
     def __post_init__(self) -> None:
         for name in ("base_position", "donor_position"):
@@ -102,9 +109,19 @@ class OfficialScore:
     complex_iplddt: float = math.nan
     confidence_score: float = math.nan
 
-    # metric 2
+    # metric 2 - distances first, they carry most of the signal
     base_to_ligand_a: float = math.nan
     donor_to_ligand_a: float = math.nan
+    # metric 2 - approach angles. The scoring slide says the geometry term is
+    # "an arrangement of distance, angle and dihedral measurements", so a
+    # distance-only score is an incomplete copy of it.
+    base_angle_deg: float = math.nan
+    donor_angle_deg: float = math.nan
+
+    # "how much did it change" - RMSD between the structure we designed and the
+    # structure Boltz predicts from its sequence. A design the model reproduces
+    # is a design whose active site survives, which is the whole problem.
+    design_rmsd_a: float = math.nan
 
     # metric 3
     base_burial_ca_count: int = -1
@@ -224,6 +241,73 @@ def contact_distance(
     return float(np.linalg.norm(selected.coord[0] - point.coord[0]))
 
 
+def _residue_atom(atoms: struc.AtomArray, position: int, atom_name: str):
+    """One named atom of the residue at a 1-based CA-array position, or None."""
+    ca = _protein_ca(atoms)
+    if not 1 <= position <= ca.array_length():
+        raise IndexError(
+            f"position {position} is outside the predicted structure (1..{ca.array_length()})"
+        )
+    residue = ca[position - 1]
+    selected = atoms[
+        (~atoms.hetero)
+        & (atoms.chain_id == residue.chain_id)
+        & (atoms.res_id == residue.res_id)
+        & (atoms.ins_code == residue.ins_code)
+        & (atoms.atom_name == atom_name)
+    ]
+    return selected.coord[0] if selected.array_length() == 1 else None
+
+
+def approach_angle(
+    atoms: struc.AtomArray,
+    position: int,
+    root_atom: str,
+    contact_atom: str,
+    ligand: struc.AtomArray,
+    ligand_atom: str,
+) -> float:
+    """Angle root-contact...ligand, in degrees. NaN if any atom is missing.
+
+    Distance alone cannot tell a productive contact from an accidental one: a
+    carboxylate oxygen 3 A from the ligand but pointing away is not a catalytic
+    base. This is the cheap second half of the geometry term.
+    """
+    root = _residue_atom(atoms, position, root_atom)
+    contact = _residue_atom(atoms, position, contact_atom)
+    point = ligand[ligand.atom_name == ligand_atom]
+    if root is None or contact is None or point.array_length() != 1:
+        return math.nan
+    a = root - contact
+    b = point.coord[0] - contact
+    na, nb = np.linalg.norm(a), np.linalg.norm(b)
+    if na == 0 or nb == 0:
+        return math.nan
+    cosine = float(np.clip(np.dot(a, b) / (na * nb), -1.0, 1.0))
+    return float(np.degrees(np.arccos(cosine)))
+
+
+def backbone_rmsd(predicted: struc.AtomArray, reference: struc.AtomArray) -> float:
+    """CA-RMSD after optimal superposition: how much the fold *changed*.
+
+    The organisers compute this themselves (``backbone_ca_rmsd_from_rfd3`` in
+    their summary: 2.16 A for the reference design). Low change means Boltz
+    agrees with the structure we designed, which is the thing that decides
+    whether the active site survives re-prediction.
+    """
+    p = _protein_ca(predicted).coord
+    r = _protein_ca(reference).coord
+    if p.shape != r.shape or p.size == 0:
+        return math.nan
+    if not (np.isfinite(p).all() and np.isfinite(r).all()):
+        return math.nan
+    pc, rc = p - p.mean(axis=0), r - r.mean(axis=0)
+    u, _s, vt = np.linalg.svd(pc.T @ rc)
+    rotation = u @ np.diag([1.0, 1.0, float(np.linalg.det(u @ vt))]) @ vt
+    aligned = pc @ rotation
+    return float(np.sqrt(np.mean(np.sum((aligned - rc) ** 2, axis=1))))
+
+
 def base_burial(atoms: struc.AtomArray, base_position: int, radius: float = BURIAL_RADIUS_A) -> int:
     """Number of CA atoms within ``radius`` of the catalytic base's CA.
 
@@ -281,8 +365,14 @@ def score_prediction(
     site: CatalyticSite,
     *,
     seed: int | None = None,
+    reference_structure: Path | None = None,
 ) -> OfficialScore:
-    """Score one Boltz-2 prediction against the four official metrics."""
+    """Score one Boltz-2 prediction against the four official metrics.
+
+    ``reference_structure`` is the structure we *designed* (the RFD3 backbone).
+    Supplying it adds ``design_rmsd_a`` - how much the fold changed when the
+    model rebuilt it from sequence alone.
+    """
     score = OfficialScore(source=str(structure_path), seed=seed)
     atoms = read_complex(structure_path)
     conf = read_confidence(confidence_path)
@@ -332,8 +422,25 @@ def score_prediction(
             f"at position {site.donor_position}; atom missing or ambiguous"
         )
 
+    # ---- metric 2b: approach angles (secondary to the distances)
+    score.base_angle_deg = approach_angle(
+        atoms, site.base_position, site.base_root_atom, site.base_atom,
+        ligand, site.base_ligand_atom,
+    )
+    score.donor_angle_deg = approach_angle(
+        atoms, site.donor_position, site.donor_root_atom, site.donor_atom,
+        ligand, site.donor_ligand_atom,
+    )
+
     # ---- metric 3: burial
     score.base_burial_ca_count = base_burial(atoms, site.base_position)
+
+    # ---- how much the fold changed from the design we handed over
+    if reference_structure is not None:
+        try:
+            score.design_rmsd_a = backbone_rmsd(atoms, read_complex(reference_structure))
+        except (ValueError, OSError, FileNotFoundError) as exc:
+            score.note(f"cannot compare with the designed structure: {exc}")
 
     # ---- pocket sanity
     score.min_ligand_protein_a, score.clash_pairs = ligand_packing(atoms, ligand)
@@ -349,7 +456,14 @@ def score_run(run_dir: Path, site: CatalyticSite, *, seed: int | None = None) ->
 # --------------------------------------------------------------- consistency
 
 #: Metrics whose reproducibility across seeds is metric 4.
-CONSISTENCY_METRICS = ("ipde", "base_to_ligand_a", "donor_to_ligand_a", "base_burial_ca_count")
+CONSISTENCY_METRICS = (
+    "ipde",
+    "base_to_ligand_a", "donor_to_ligand_a",
+    "base_angle_deg", "donor_angle_deg",
+    "base_burial_ca_count",
+    "complex_plddt",        # stability
+    "design_rmsd_a",        # how much the fold changed
+)
 
 
 def aggregate_seeds(scores: list[OfficialScore]) -> dict:

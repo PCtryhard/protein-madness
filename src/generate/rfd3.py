@@ -132,6 +132,58 @@ def denovo(
     )
 
 
+#: 6NT heavy atoms, from the organisers' motif file. The triazole nitrogens
+#: N1/N3 carry the scored contacts; the nitro oxygens are unengaged.
+LIGAND_ATOMS = ("O21", "NO1", "O11", "C5", "C6", "C7", "C7A", "N1", "C3A", "C4", "N3", "N2")
+#: The nitro group's oxygens: strong H-bond acceptors, contacted by nothing in
+#: the organisers' motif. Anchoring them is the cheapest way to stop the ligand
+#: drifting, which is our measured failure (BRIEF.md 1).
+NITRO_OXYGENS = ("O11", "O21")
+
+
+def denovo_extra_contacts(
+    name: str,
+    input_pdb: str = "HG3_17_kemp_motif.pdb",
+    length: int = 260,
+    with_stack: bool = False,
+    acceptors: tuple[str, ...] = NITRO_OXYGENS,
+    bury_base: bool = True,
+) -> BackboneSpec:
+    """De novo, plus conditioning for extra ligand contacts.
+
+    **The scored geometry is untouched.** The judges measure exactly two
+    contacts (ASP OD2 -> 6NT N3, GLN NE2 -> 6NT N1), and those stay pinned
+    exactly as in :func:`denovo`. What this adds is conditioning that asks RFD3
+    for *additional* interactions, which cannot cost us anything on the geometry
+    term and may buy us iPDE and consistency:
+
+    * ``select_hbond_acceptor`` on the nitro oxygens - the strongest acceptors
+      on the ligand, contacted by nothing in the supplied motif. If RFD3 builds
+      donors against them, the ligand is held by four points instead of two.
+    * ``select_buried`` on the catalytic base - official metric 3 is literally
+      how buried that residue is, so asking for it directly is worth a try.
+
+    **The semantics of these conditioning fields are not verified by us.** They
+    are read off the installed ``DesignInputSpecification``, not from a run.
+    ``prevalidate_inputs=True`` will reject a malformed spec, and the honest
+    test is whether this arm measurably beats the others - which is why it runs
+    as a parallel arm rather than replacing anything.
+    """
+    unknown = [a for a in acceptors if a not in LIGAND_ATOMS]
+    if unknown:
+        raise ValueError(f"{unknown} are not 6NT atoms; known: {LIGAND_ATOMS}")
+    spec = denovo(name, input_pdb=input_pdb, length=length, with_stack=with_stack)
+    extra: dict = {}
+    if acceptors:
+        extra["select_hbond_acceptor"] = {KEMP_LIGAND: ",".join(acceptors)}
+    if bury_base:
+        extra["select_buried"] = KEMP_BASE
+    return BackboneSpec(
+        name=spec.name, input_pdb=spec.input_pdb, contig=spec.contig,
+        ligand=spec.ligand, motif_residues=spec.motif_residues, extra=extra,
+    )
+
+
 def partial(
     name: str,
     parent_pdb: str,

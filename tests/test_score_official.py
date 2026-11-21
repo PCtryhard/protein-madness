@@ -143,7 +143,12 @@ def test_aggregate_reports_mean_and_spread():
     assert out["ipde_mean"] == pytest.approx(2.0)
     assert out["ipde_std"] == pytest.approx(1.0)
     assert out["base_to_ligand_a_mean"] == pytest.approx(5.0)
-    assert out["metrics_missing"] == []
+    # The angle/stability/change terms were never measured on these fakes, and
+    # must be REPORTED as missing rather than quietly treated as fine: a design
+    # is never rewarded for having been measured less.
+    assert set(out["metrics_missing"]) == {
+        "base_angle_deg", "donor_angle_deg", "complex_plddt", "design_rmsd_a",
+    }
 
 
 def test_aggregate_ignores_nan_but_records_the_count():
@@ -169,3 +174,182 @@ def test_aggregate_needs_at_least_one_score():
 def test_catalytic_site_rejects_zero_based_positions():
     with pytest.raises(ValueError, match="1-based"):
         CatalyticSite(base_position=0, donor_position=99)
+
+
+# ------------------------------- angles, stability, and amount of change
+
+def test_approach_angle_is_measured_on_the_reference(scored):
+    """The scoring slide says geometry is distance, angle AND dihedral. A
+    distance-only score is an incomplete copy of the judges' metric."""
+    assert 0.0 <= scored.base_angle_deg <= 180.0
+    assert 0.0 <= scored.donor_angle_deg <= 180.0
+
+
+def test_approach_angle_geometry_is_correct():
+    """A right angle must read 90 degrees, whatever the chemistry."""
+    import numpy as np
+    from src.score.official import approach_angle
+
+    class _Lig:
+        atom_name = np.array(["N3"])
+        coord = np.array([[0.0, 1.0, 0.0]])
+        def __getitem__(self, mask):
+            return self
+        def array_length(self):
+            return 1
+
+    atoms = read_complex(find_prediction(REFERENCE)[0])
+    # geometry is exercised directly: root at +x, contact at origin,
+    # ligand at +y  ->  90 degrees
+    from src.score import official
+    saved = official._residue_atom
+    official._residue_atom = lambda a, p, n: (
+        np.array([1.0, 0.0, 0.0]) if n == "CG" else np.array([0.0, 0.0, 0.0])
+    )
+    try:
+        angle = approach_angle(atoms, 1, "CG", "OD2", _Lig(), "N3")
+    finally:
+        official._residue_atom = saved
+    assert angle == pytest.approx(90.0, abs=1e-6)
+
+
+def test_backbone_rmsd_is_zero_for_the_same_structure():
+    from src.score.official import backbone_rmsd
+    atoms = read_complex(find_prediction(REFERENCE)[0])
+    # 1e-5, not 1e-9: the Kabsch superposition goes through an SVD, so an
+    # identical pair lands on float noise rather than exact zero.
+    assert backbone_rmsd(atoms, atoms) == pytest.approx(0.0, abs=1e-5)
+
+
+def test_consistency_covers_angles_stability_and_change():
+    from src.score.official import CONSISTENCY_METRICS
+    for metric in ("base_angle_deg", "complex_plddt", "design_rmsd_a"):
+        assert metric in CONSISTENCY_METRICS
+
+
+def test_fitness_weights_distance_above_angle():
+    """The mentor's framing, encoded: distance dominates, angle tie-breaks."""
+    from src.evolve.select import FitnessWeights
+    w = FitnessWeights()
+    # 1 A of contact error must cost more than 10 degrees of angle error
+    assert w.base_geometry > w.angle * 1.0
+
+
+def test_fitness_penalises_a_badly_pointed_contact():
+    from src.evolve.select import fitness
+    good = {"base_to_ligand_a_mean": 3.0, "ipde_mean": 2.0,
+            "base_burial_ca_count_mean": 40.0, "base_angle_deg_mean": 120.0}
+    bad = dict(good, base_angle_deg_mean=30.0)
+    assert fitness(bad) > fitness(good)
+
+
+def test_fitness_penalises_an_unstable_fold():
+    from src.evolve.select import fitness
+    stable = {"base_to_ligand_a_mean": 3.0, "ipde_mean": 2.0,
+              "base_burial_ca_count_mean": 40.0, "complex_plddt_mean": 0.85}
+    floppy = dict(stable, complex_plddt_mean=0.45)
+    assert fitness(floppy) > fitness(stable)
+
+
+def test_fitness_penalises_a_fold_that_changed_a_lot():
+    from src.evolve.select import fitness
+    faithful = {"base_to_ligand_a_mean": 3.0, "ipde_mean": 2.0,
+                "base_burial_ca_count_mean": 40.0, "design_rmsd_a_mean": 1.0}
+    drifted = dict(faithful, design_rmsd_a_mean=6.0)
+    assert fitness(drifted) > fitness(faithful)
+
+
+def test_missing_new_terms_do_not_break_scoring():
+    """Older aggregates without angles/stability must still rank."""
+    from src.evolve.select import fitness
+    minimal = {"base_to_ligand_a_mean": 3.0, "ipde_mean": 2.0,
+               "base_burial_ca_count_mean": 40.0}
+    assert math.isfinite(fitness(minimal))
+
+
+# ------------------------------------------------- calibration against reality
+
+#: Measured on PDB 4BS0 (HG3.17 + 6NT, 1.09 A) with our own metrics.
+#: If a real, highly active Kemp eliminase does not score well here, our
+#: ranking of de novo designs is meaningless.
+HG317 = {
+    "base_to_ligand_a_mean": 2.53, "donor_to_ligand_a_mean": 3.10,
+    "base_angle_deg_mean": 130.9, "donor_angle_deg_mean": 133.6,
+    "base_burial_ca_count_mean": 47.0, "ipde_mean": 2.0,
+}
+#: The organisers' own de novo reference design, measured in job 1.
+REFERENCE_DESIGN = {
+    "base_to_ligand_a_mean": 11.178812, "donor_to_ligand_a_mean": 7.478555,
+    "base_burial_ca_count_mean": 30.0, "ipde_mean": 2.5525,
+}
+
+
+def test_a_real_kemp_eliminase_beats_the_reference_design():
+    """The sanity check the whole ranking rests on."""
+    from src.evolve.select import fitness
+    assert fitness(HG317) < fitness(REFERENCE_DESIGN)
+
+
+def test_the_real_enzyme_pays_no_geometry_penalty_at_all():
+    """HG3.17's contacts and angles should sit in the free region. If they do
+    not, our 'ideal' is wrong, not the enzyme."""
+    from src.evolve.select import FitnessWeights, contact_penalty
+    w = FitnessWeights()
+    assert contact_penalty(HG317["base_to_ligand_a_mean"]) == 0.0
+    assert contact_penalty(HG317["donor_to_ligand_a_mean"]) == 0.0
+    for key in ("base_angle_deg_mean", "donor_angle_deg_mean"):
+        assert abs(HG317[key] - w.ideal_angle_deg) <= w.angle_tolerance_deg
+
+
+def test_the_real_enzyme_passes_the_hard_gates():
+    from src.evolve.select import passes_gates
+    ok, reasons = passes_gates(HG317, "A" * 260)
+    assert ok, f"HG3.17 was rejected by our own gates: {reasons}"
+
+
+def test_burial_target_is_set_from_the_real_enzyme_not_the_failing_design():
+    from src.evolve.select import FitnessWeights
+    w = FitnessWeights()
+    assert w.burial_target >= 45.0
+    assert w.burial_target > REFERENCE_DESIGN["base_burial_ca_count_mean"]
+
+
+def test_knocking_out_the_catalytic_base_is_punished():
+    """Move the base out of contact and the design must get clearly worse."""
+    from src.evolve.select import fitness
+    knockout = dict(HG317, base_to_ligand_a_mean=9.0)
+    assert fitness(knockout) > fitness(HG317) + 3.0
+
+
+# --------------------------------- the contact window is a BAND, not a ramp
+
+def test_contact_penalty_is_two_sided():
+    """Closer is NOT always better. These are hydrogen bonds, and an O...N
+    hydrogen bond does not keep improving as the atoms overlap."""
+    from src.evolve.select import contact_penalty
+    assert contact_penalty(2.4) == 0.0          # lower edge
+    assert contact_penalty(2.53) == 0.0         # HG3.17 itself
+    assert contact_penalty(3.0) == 0.0          # middle of the band
+    assert contact_penalty(3.5) == 0.0          # upper edge
+    assert contact_penalty(4.5) > 0.0           # too far
+    assert contact_penalty(1.5) > 0.0           # physically impossible
+
+
+def test_an_impossible_contact_is_not_rewarded():
+    """Regression: the one-sided version scored 1.5 A as PERFECT."""
+    from src.evolve.select import contact_penalty
+    assert contact_penalty(1.5) > contact_penalty(4.0), (
+        "a 1.5 A contact must cost more than a merely weak 4.0 A one"
+    )
+
+
+def test_too_close_costs_more_than_equally_too_far():
+    """A clash destabilises; a long contact is only weak."""
+    from src.evolve.select import contact_penalty
+    assert contact_penalty(2.4 - 0.5) > contact_penalty(3.5 + 0.5)
+
+
+def test_the_real_enzyme_still_sits_in_the_free_window():
+    from src.evolve.select import contact_penalty
+    assert contact_penalty(2.53) == 0.0         # HG3.17 base
+    assert contact_penalty(3.10) == 0.0         # HG3.17 donor
