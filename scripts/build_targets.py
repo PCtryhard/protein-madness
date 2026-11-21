@@ -456,7 +456,14 @@ def discover(inputs_name: str | None = None) -> list[tuple[Path, Path]]:
     named directory.
     """
     found: list[tuple[Path, Path]] = []
-    for folder in sorted(DATA.glob("0[1-9]")):
+    # Two or more digits, so a tenth variant is picked up rather than silently
+    # skipped. `0[1-9]` would have missed data/10 onwards, and a commit on main
+    # already carried the message "created 08-14".
+    folders = sorted(
+        d for d in DATA.glob("*")
+        if d.is_dir() and d.name.isdigit() and len(d.name) >= 2
+    )
+    for folder in folders:
         candidates = [d for d in (folder / "inputs").glob("*") if d.is_dir()]
         if not candidates:
             print(f"warning: {folder}/inputs has no subdirectories, skipping",

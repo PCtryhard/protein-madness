@@ -70,7 +70,7 @@ else
     RUN_KIND="FULL SEARCH (max_cycles $MAX_CYCLES) -- hours per variant"
 fi
 
-mapfile -t ALL_TARGETS < <(ls -1 config/targets/0*.yaml | sort)
+mapfile -t ALL_TARGETS < <(ls -1 config/targets/[0-9][0-9]_*.yaml | sort)
 [ "${#ALL_TARGETS[@]}" -gt 0 ] || { echo "no config/targets/0*.yaml found" >&2; exit 1; }
 
 TARGETS=()

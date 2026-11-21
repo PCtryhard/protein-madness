@@ -11,6 +11,7 @@ module is importable from test files without surprises.
 
 from __future__ import annotations
 
+import pathlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,5 +50,14 @@ def all_shipped_targets() -> list[str]:
 
 
 def variant_targets() -> list[str]:
-    """Just the seven numbered variants, without the schema example."""
-    return [t for t in all_shipped_targets() if not t.endswith("example_target.yaml")]
+    """The numbered variants, without the schema example.
+
+    Matched by "starts with two digits" rather than by a `0*` glob, so a tenth
+    variant is included rather than silently skipped.
+    """
+    import re
+
+    return [
+        t for t in all_shipped_targets()
+        if re.match(r"^\d{2}_", pathlib.Path(t).name)
+    ]

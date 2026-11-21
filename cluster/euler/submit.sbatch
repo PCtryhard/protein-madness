@@ -56,7 +56,7 @@ source "$ACTIVATE"
 
 # Pick this task's target. Sorted so the array index maps to the variant
 # number: task 1 -> 01_*, task 7 -> 07_*.
-mapfile -t TARGETS < <(ls -1 config/targets/0*.yaml | sort)
+mapfile -t TARGETS < <(ls -1 config/targets/[0-9][0-9]_*.yaml | sort)
 INDEX="${SLURM_ARRAY_TASK_ID:-1}"
 if [ "$INDEX" -lt 1 ] || [ "$INDEX" -gt "${#TARGETS[@]}" ]; then
     echo "ERROR: array index $INDEX is outside 1..${#TARGETS[@]}" >&2
