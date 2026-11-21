@@ -34,7 +34,102 @@ def compare(title, groups):
     print(f"Lowest median cost: {', '.join(winners)}")
 
 
-def summarize_run(path, limit):
+def plot_run(directory, groups, ranked, run_name):
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+    except ImportError as exc:
+        raise ValueError("install matplotlib and seaborn to use --plots") from exc
+
+    def save(fig, name):
+        for extension in ("png", "pdf"):
+            fig.savefig(directory / f"{name}.{extension}", dpi=300, bbox_inches="tight")
+        plt.close(fig)
+
+    def measured_contacts(best, metric):
+        suffix = f"__{metric}"
+        return {
+            field.removesuffix(suffix).replace("_", " "): float(value)
+            for field, value in best.items()
+            if field.endswith(suffix) and value and isfinite(float(value))
+        }
+
+    directory.mkdir(parents=True, exist_ok=True)
+    sns.set_theme(style="whitegrid", context="talk", font_scale=0.82)
+    plt.rcParams["pdf.fonttype"] = 42
+    ordered = sorted(groups)
+    branch_names = {"seed": "Initial", "wiggle": "Wiggle", "mutate": "Point mutation"}
+    labels = [f"Cycle {cycle}\n{branch_names.get(branch, branch)}" for cycle, branch in ordered]
+
+    fig, (scores_ax, outcomes_ax) = plt.subplots(1, 2, figsize=(10.8, 4.3), layout="constrained")
+    fig.suptitle(f"Design outcomes · {run_name}", fontsize=14)
+    points = [(label, score) for key, label in zip(ordered, labels)
+              for score in groups[key][1]]
+    if points:
+        locations, values = zip(*points)
+        sns.swarmplot(x=list(locations), y=list(values), order=labels,
+                      color="#23668C", size=6, ax=scores_ax)
+        for index, key in enumerate(ordered):
+            scores = groups[key][1]
+            if scores:
+                scores_ax.hlines(median(scores), index - 0.25, index + 0.25,
+                                 color="#20272E", linewidth=1.5, zorder=4)
+        scores_ax.set_title("Scores of designs that passed")
+    else:
+        scores_ax.set_xticks(range(len(labels)), labels)
+        scores_ax.set_title("No designs passed scoring")
+    scores_ax.set_ylabel("Pipeline score (higher is better)")
+    scores_ax.set_xlabel("")
+
+    from matplotlib.ticker import MaxNLocator
+
+    baseline = [0] * len(ordered)
+    for status, label, color in (
+        ("scored", "Scored", "#23668C"),
+        ("gated", "Gated", "#D98C34"),
+        ("errored", "Errored", "#A33D54"),
+    ):
+        counts = [groups[key][0][status] for key in ordered]
+        outcomes_ax.bar(range(len(ordered)), counts, bottom=baseline, color=color,
+                        label=label, width=0.62)
+        baseline = [total + n for total, n in zip(baseline, counts)]
+    outcomes_ax.set_title("Scoring outcomes")
+    outcomes_ax.set_ylabel("Design count")
+    outcomes_ax.set_xticks(range(len(labels)), labels)
+    outcomes_ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    outcomes_ax.legend(frameon=False, fontsize=10, loc="lower center",
+                       bbox_to_anchor=(0.5, -0.34), ncols=3)
+    sns.despine(fig=fig)
+    save(fig, "search_outcomes")
+
+    if ranked:
+        score, best = ranked[0]
+        panels = [(heading, measured_contacts(best, key), axis_label)
+                  for key, heading, axis_label in (
+                      ("distance", "Contact distances", "Distance (Å)"),
+                      ("angle", "Contact angles", "Angle (°)"),
+                  )]
+        panels = [(heading, values, axis_label) for heading, values, axis_label in panels if values]
+        if panels:
+            fig, axes = plt.subplots(1, len(panels), squeeze=False,
+                                     figsize=(5.6 * len(panels), 3.8), layout="constrained")
+            fig.suptitle(f"Top design · {best['design_id']} · score {score:.4f}", fontsize=14)
+            for ax, (heading, values, axis_label) in zip(axes[0], panels):
+                bars = ax.barh(list(values), list(values.values()), color="#23668C", height=0.52)
+                ax.bar_label(bars, fmt="%.2f" if "Å" in axis_label else "%.1f", padding=4)
+                ax.invert_yaxis()
+                ax.margins(x=0.18)
+                ax.set_title(heading)
+                ax.set_xlabel(axis_label)
+                ax.grid(axis="y", visible=False)
+            sns.despine(fig=fig)
+            save(fig, "best_design_geometry")
+    print(f"\nSaved presentation plots to {directory} (PNG and PDF)")
+
+
+def summarize_run(path, limit, plots=None):
     csv_path = path / "designs.csv" if path.is_dir() else path
     with csv_path.open(newline="") as stream:
         reader = csv.DictReader(stream)
@@ -83,11 +178,16 @@ def summarize_run(path, limit):
         print("\nDesign errors")
         for error, count in errors.most_common(5):
             print(f"  {count:>3}  {error}")
+    ranked.sort(key=lambda pair: (-pair[0], pair[1]["design_id"]))
+    if plots is not None:
+        if not rows:
+            print("\nNo design rows to plot.")
+        else:
+            plot_run(plots, groups, ranked, csv_path.parent.name)
     if not ranked:
         print("\nNo designs passed the scoring gates.")
         return
 
-    ranked.sort(key=lambda pair: (-pair[0], pair[1]["design_id"]))
     print(f"\nTop {min(limit, len(ranked))} designs")
     for rank, (score, row) in enumerate(ranked[:limit], 1):
         mutation = f", {row['mutation']}" if row.get("mutation") else ""
@@ -117,12 +217,15 @@ def main():
     parser.add_argument("--run", type=Path,
                         help="pipeline run directory, exported scores directory, or designs.csv")
     parser.add_argument("--top", type=int, default=5, help="number of designs to show for --run")
+    parser.add_argument("--plots", type=Path, help="save presentation PNG and PDF figures here")
     args = parser.parse_args()
+    if args.plots is not None and args.run is None:
+        parser.error("--plots requires --run")
     if args.top < 1:
         parser.error("--top must be at least 1")
     if args.run is not None:
         try:
-            summarize_run(args.run, args.top)
+            summarize_run(args.run, args.top, args.plots)
         except (OSError, ValueError) as exc:
             parser.error(str(exc))
         return
