@@ -48,13 +48,11 @@ echo
 
 # Fail before the allocation is spent if the config or target is wrong.
 "$RFD3_ENV/bin/python" -m src.cli smoke \
-    --pipeline config/pipeline.euler.yaml \
     --target config/targets/01_his_asp.yaml
 
 echo
 echo "=== the search ==="
 "$RFD3_ENV/bin/python" -m src.cli run \
-    --pipeline config/pipeline.euler.yaml \
     --target config/targets/01_his_asp.yaml \
     --name euler-01 -v
 

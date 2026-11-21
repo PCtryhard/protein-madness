@@ -235,7 +235,8 @@ this is the previous pipeline's run, whose ligand drift inflates the
 between-design spread, so the ratios are if anything optimistic.
 
 **2026-11-21 — `run.max_cycles: 0` means seed-only, and is the shape of the first real run.**
-`config/pipeline.small.yaml`: 10 backbones x 8 sequences, no expansion. Checked
+`config/pipeline.small.yaml` (since consolidated into `config/pipeline.yaml`):
+10 backbones x 8 sequences, no expansion. Checked
 in `ScaffoldSearch.seed_frontier` rather than in the runner's loop, because the
 loop would otherwise run one whole cycle before the stopping condition was
 consulted.
