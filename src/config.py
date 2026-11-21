@@ -84,6 +84,24 @@ class RFdiffusionCfg(Strict):
         return self
 
 
+class RFD3Cfg(Strict):
+    """RFD3, which is what the hackathon clusters actually have.
+
+    Separate from RFdiffusionCfg because the tools are not interchangeable:
+    RFD3 takes a JSON design spec and supports atom-level freezing, while
+    RFdiffusion takes a contig string and holds whole residues. The runner
+    uses RFD3; src/stages/rfdiffusion.py is kept for a cluster that has the
+    other one.
+    """
+
+    binary: str = "rfd3"
+    checkpoint: str
+    n_batches: Annotated[int, Field(ge=1)] = 5
+    diffusion_batch_size: Annotated[int, Field(ge=1)] = 1
+    partial_T: Annotated[int, Field(ge=1)] = 10
+    extra_args: list[str] = []
+
+
 class LigandMPNNCfg(Strict):
     run_script: str
     checkpoint: str = "ligandmpnn_v_32_010_25.pt"
@@ -91,6 +109,11 @@ class LigandMPNNCfg(Strict):
     sequences_per_backbone: Annotated[int, Field(ge=1)] = 4
     omit_AA: str = "CX"
     pack_side_chains: bool = False
+    # The cluster's own launcher passes both of these; without the atom context
+    # LigandMPNN is not actually ligand-aware, which is the whole point of
+    # using it rather than ProteinMPNN.
+    use_atom_context: bool = True
+    use_side_chain_context: bool = True
 
 
 class BoltzCfg(Strict):
@@ -103,6 +126,13 @@ class BoltzCfg(Strict):
     no_kernels: bool = True
     precision: Literal["32", "16", "bf16"] = "32"
     max_tokens: Annotated[int, Field(ge=1)] = 400
+    accelerator: Literal["gpu", "cpu"] = "gpu"
+    devices: Annotated[int, Field(ge=1)] = 1
+    # Where the pre-downloaded weights live. The wrapper symlinks them into the
+    # run's own cache dir rather than copying 6 GB per run, and rather than
+    # letting Boltz try to download them -- which fails on a compute node with
+    # no outbound internet.
+    assets_dir: str | None = None
 
     @field_validator("precision")
     @classmethod
@@ -250,7 +280,9 @@ class SearchCfg(Strict):
 
 class PipelineCfg(Strict):
     run: RunCfg = RunCfg()
-    rfdiffusion: RFdiffusionCfg
+    rfd3: RFD3Cfg
+    # Optional: only needed on a cluster that has RFdiffusion instead of RFD3.
+    rfdiffusion: RFdiffusionCfg | None = None
     ligandmpnn: LigandMPNNCfg
     boltz: BoltzCfg = BoltzCfg()
     protonation: ProtonationCfg = ProtonationCfg()
@@ -282,14 +314,30 @@ class PipelineCfg(Strict):
 class Seed(Strict):
     id: str
     pdb: str
-    contigs: str
+    # RFD3's contig is a total-length range such as "260-260", not
+    # RFdiffusion's segment specification. The residues to keep are named by
+    # motif.fixed, and which of their atoms to pin by motif.fixed_atoms, so
+    # they are not repeated here.
+    contig: str
 
-    @field_validator("contigs")
+    @field_validator("contig")
     @classmethod
     def _nonempty(cls, v: str) -> str:
         if not v.strip():
-            raise ValueError("seed.contigs is empty")
+            raise ValueError("seed.contig is empty")
         return v
+
+    @property
+    def max_length(self) -> int:
+        """The longest protein this contig can produce, for the token budget."""
+        try:
+            parts = [int(x) for x in self.contig.split("-")]
+        except ValueError as exc:
+            raise ValueError(
+                f"seed {self.id}: cannot read a length range from contig "
+                f"{self.contig!r}; RFD3 expects something like '260-260'"
+            ) from exc
+        return max(parts)
 
 
 class Ligand(Strict):
@@ -443,6 +491,11 @@ class Target(Strict):
 
 class MotifCfg(Strict):
     fixed: list[ResidueRef]
+    # Which atoms of each motif residue RFD3 pins, keyed by "<chain><resnum>".
+    # A residue absent from this map is pinned whole ("ALL"), the conservative
+    # reading. Atom-level freezing is an RFD3 capability; RFdiffusion cannot do
+    # it and ignores this.
+    fixed_atoms: dict[str, str] = {}
 
     @field_validator("fixed")
     @classmethod
@@ -456,6 +509,20 @@ class MotifCfg(Strict):
 
     def as_keys(self) -> set[tuple[str, int]]:
         return {(r.chain, r.resnum) for r in self.fixed}
+
+    def labels(self) -> set[str]:
+        return {f"{r.chain}{r.resnum}" for r in self.fixed}
+
+    @model_validator(mode="after")
+    def _fixed_atoms_match_fixed(self) -> MotifCfg:
+        unknown = sorted(set(self.fixed_atoms) - self.labels())
+        if unknown:
+            raise ValueError(
+                f"motif.fixed_atoms names {unknown}, which are not in "
+                f"motif.fixed ({sorted(self.labels())}). An atom selection for "
+                "a residue that is not held would be silently ignored."
+            )
+        return self
 
 
 Target.model_rebuild()

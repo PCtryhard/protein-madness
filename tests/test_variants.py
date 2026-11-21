@@ -89,12 +89,9 @@ def test_every_variant_fits_the_token_budget(pipeline_path, target):
     boltz.max_tokens, or the run refuses every design it generates."""
     cfg, _, _ = _load_variant(pipeline_path, target)
     atoms = ligand_atom_count(cfg.target.ligand)
-    longest = 0
-    for segment in cfg.target.seeds[0].contigs.split("/"):
-        if segment.startswith("A"):
-            longest += 1                      # a single fixed motif residue
-        else:
-            longest += int(segment.split("-")[1])
+    # RFD3's contig is a total length range, so the longest protein it can
+    # produce is simply its upper bound.
+    longest = cfg.target.seeds[0].max_length
     assert longest + atoms <= cfg.pipeline.boltz.max_tokens, (
         f"{target}: longest expansion is {longest} + {atoms} ligand = "
         f"{longest + atoms} tokens, over max_tokens {cfg.pipeline.boltz.max_tokens}"

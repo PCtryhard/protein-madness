@@ -22,10 +22,13 @@ import json
 import logging
 import random
 import threading
+from datetime import datetime, timezone
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+
+from dataclasses import replace
 
 from .config import Config, Seed
 from .live import LiveResults
@@ -35,7 +38,7 @@ from .search.wiggle import WiggleJob
 from .stages import boltz as boltz_stage
 from .stages import ligandmpnn as mpnn_stage
 from .stages import protonate as protonate_stage
-from .stages import rfdiffusion as rfd_stage
+from .stages import rfd3 as rfd_stage
 from .stages.base import StageError
 from .store import (
     DesignRow,
@@ -44,6 +47,7 @@ from .store import (
     sequence_hash,
 )
 from .tracking import (
+    write_pdb,
     Provenance,
     TrackingError,
     assert_motif_unchanged,
@@ -51,7 +55,7 @@ from .tracking import (
     ligand_atom_map_ccd,
     ligand_atom_map_graph,
     read_structure,
-    seed_to_hal_map,
+    seed_to_hal_map_rfd3,
 )
 
 log = logging.getLogger("pipeline.runner")
@@ -172,6 +176,24 @@ class Runner:
             with self.paths.stage_log.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps({"design_id": design_id, **payload}) + "\n")
 
+    def _stage_begin(self, scaffold_id: str, stage: str, detail: str = "") -> None:
+        """Announce a stage BEFORE it runs.
+
+        The stage log only records a stage once it finishes, so without this
+        the console goes quiet for the minutes RFD3 or Boltz takes and there is
+        no way to tell work from a hang.
+        """
+        log.info("[%s] %s ... %s", scaffold_id, stage, detail)
+        with self._log_lock:
+            with self.paths.stage_log.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps({
+                    "scaffold_id": scaffold_id,
+                    "stage": stage,
+                    "event": "begin",
+                    "detail": detail,
+                    "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                }) + "\n")
+
     # ------------------------------------------------------------------
     # the ligand atom map, cached once per run
     # ------------------------------------------------------------------
@@ -248,6 +270,10 @@ class Runner:
         for replicate in range(pipeline.run.eval_replicates):
             seed_value = pipeline.run.seed + replicate
             name = f"{design_id}_r{replicate}" if pipeline.run.eval_replicates > 1 else design_id
+            self._stage_begin(
+                scaffold_id, "boltz-2 (fold + score)",
+                f"{design_id}, replicate {replicate}, {len(sequence)} residues",
+            )
             out, stage_result = boltz_stage.predict(
                 sequences=sequences,
                 ligand=self.cfg.target.ligand,
@@ -452,15 +478,31 @@ class Runner:
         design_dir = self.paths.design_dir(f"{scaffold_id}.c00.seed")
 
         def generate(gpu: int) -> list[Candidate]:
+            spec = rfd_stage.spec_from_seed(
+                seed=seed,
+                motif=self.cfg.target.motif,
+                ligand_id=self.cfg.target.ligand.id,
+                repo_root=self.repo_root,
+                key=f"{self.cfg.target.name}_{seed.id}",
+            )
+            n = self.cfg.pipeline.rfd3.n_batches
+            self._stage_begin(
+                scaffold_id, "rfd3 (cycle 0: motif scaffolding)",
+                f"{n} backbone(s), contig {seed.contig}, pinning "
+                f"{spec.unindex}",
+            )
             backbones, stage_result = rfd_stage.run(
-                self.cfg.pipeline.rfdiffusion,
-                input_pdb=self.repo_root / seed.pdb,
-                contigs=seed.contigs,
-                out_prefix=design_dir / "rfd",
+                self.cfg.pipeline.rfd3,
+                specs=[spec],
+                out_dir=design_dir / "rfd3",
+                n_designs=n,
                 partial=False,     # cycle 0 scaffolds the motif; it does not wiggle
                 gpu=gpu,
+                seed=self.cfg.pipeline.run.seed,
             )
             self._log_stage(scaffold_id, stage_result.as_log_dict())
+            log.info("[%s] rfd3 produced %d backbone(s) in %.0fs",
+                     scaffold_id, len(backbones), stage_result.wall_seconds)
             return self._design_and_score_backbones(
                 backbones, scaffold_id, cycle=0, branch="seed",
                 parent_id=None, gpu=gpu,
@@ -470,7 +512,7 @@ class Runner:
 
     def _design_and_score_backbones(
         self,
-        backbones: list[rfd_stage.RFdiffusionOutput],
+        backbones: list[rfd_stage.RFD3Output],
         scaffold_id: str,
         cycle: int,
         branch: str,
@@ -482,8 +524,17 @@ class Runner:
         motif = self.cfg.target.motif
 
         for backbone in backbones:
-            seed_to_hal = seed_to_hal_map(backbone.trb, motif)
-            backbone_structure = read_structure(backbone.pdb)
+            seed_to_hal = seed_to_hal_map_rfd3(backbone.metadata, motif)
+            backbone_structure = read_structure(
+                backbone.structure, self.cfg.target.ligand.ccd
+            )
+            fidelity = backbone.motif_fidelity()
+            if fidelity:
+                log.info(
+                    "[%s] backbone %d motif RMSD: %s",
+                    scaffold_id, backbone.index,
+                    ", ".join(f"{k} {v:.2f}A" for k, v in sorted(fidelity.items())),
+                )
             motif_expected = {
                 hal: backbone_structure.residues[hal]
                 for hal in seed_to_hal.values()
@@ -496,20 +547,36 @@ class Runner:
                 if hal_key in motif_expected
             }
 
+            # LigandMPNN reads a PDB; RFD3 writes a gzipped mmCIF. Convert
+            # once, next to the backbone, so the file is inspectable too.
+            backbone_pdb = backbone.structure.parent / (
+                backbone.structure.name.split(".cif")[0] + ".pdb"
+            )
+            if not backbone_pdb.exists():
+                write_pdb(backbone_structure, backbone_pdb)
+
+            self._stage_begin(
+                scaffold_id, "ligandmpnn",
+                f"backbone {backbone.index}, "
+                f"{self.cfg.pipeline.ligandmpnn.sequences_per_backbone} sequence(s)",
+            )
             mpnn_out, stage_result = mpnn_stage.run(
                 self.cfg.pipeline.ligandmpnn,
-                input_pdb=backbone.pdb,
-                out_dir=backbone.pdb.parent / f"mpnn_{backbone.index}",
+                input_pdb=backbone_pdb,
+                out_dir=backbone.structure.parent / f"mpnn_{backbone.index}",
                 motif=motif,
                 seed_to_hal=seed_to_hal,
                 gpu=gpu,
                 seed=self.cfg.pipeline.run.seed,
             )
             self._log_stage(scaffold_id, stage_result.as_log_dict())
+            designs = mpnn_stage.designed_sequences(mpnn_out)
+            log.info("[%s] ligandmpnn gave %d sequence(s) for backbone %d",
+                     scaffold_id, len(designs), backbone.index)
 
-            for header, sequence in mpnn_stage.designed_sequences(mpnn_out):
+            for header, sequence in designs:
                 design_id = new_design_id(
-                    scaffold_id, cycle, branch, f"{backbone.pdb}:{header}"
+                    scaffold_id, cycle, branch, f"{backbone.structure}:{header}"
                 )
                 try:
                     out.append(
@@ -522,7 +589,7 @@ class Runner:
                             parent_id=parent_id,
                             seed_to_hal=seed_to_hal,
                             motif_expected=motif_expected,
-                            backbone_path=str(backbone.pdb),
+                            backbone_path=str(backbone_pdb),
                             mutation=None,
                             gpu=gpu,
                         )
@@ -555,18 +622,35 @@ class Runner:
             design_dir = self.paths.design_dir(
                 f"{search.scaffold_id}.c{search.cycle + 1:02d}.wiggle.{job.parent_id[-6:]}"
             )
+            seed = self._seed_for(search.scaffold_id)
+            spec = rfd_stage.spec_from_seed(
+                seed=seed,
+                motif=self.cfg.target.motif,
+                ligand_id=self.cfg.target.ligand.id,
+                repo_root=self.repo_root,
+                key=f"{self.cfg.target.name}_{seed.id}_wiggle",
+            )
+            # The wiggle re-noises the parent's backbone, not the seed.
+            spec = replace(spec, input_pdb=Path(job.backbone_path))
+            n = (self.cfg.pipeline.search.wiggle.designs_per_parent
+                 or self.cfg.pipeline.rfd3.n_batches)
+            self._stage_begin(
+                search.scaffold_id, "rfd3 (wiggle: partial diffusion)",
+                f"parent {job.parent_id}, partial_T="
+                f"{self.cfg.pipeline.rfd3.partial_T}, {n} backbone(s)",
+            )
             backbones, stage_result = rfd_stage.run(
-                self.cfg.pipeline.rfdiffusion,
-                input_pdb=job.backbone_path,
-                contigs=self._contigs_for(search.scaffold_id),
-                out_prefix=design_dir / "rfd",
-                # None falls through to rfdiffusion.designs_per_parent inside
-                # the stage wrapper, which is the documented default.
-                num_designs=self.cfg.pipeline.search.wiggle.designs_per_parent,
+                self.cfg.pipeline.rfd3,
+                specs=[spec],
+                out_dir=design_dir / "rfd3",
+                n_designs=n,
                 partial=True,       # the wiggle: re-noise for partial_T steps
                 gpu=gpu,
+                seed=self.cfg.pipeline.run.seed + search.cycle,
             )
             self._log_stage(job.parent_id, stage_result.as_log_dict())
+            log.info("[%s] wiggle produced %d backbone(s) from %s",
+                     search.scaffold_id, len(backbones), job.parent_id)
             return self._design_and_score_backbones(
                 backbones,
                 search.scaffold_id,
@@ -664,11 +748,11 @@ class Runner:
     # the loop
     # ------------------------------------------------------------------
 
-    def _contigs_for(self, scaffold_id: str) -> str:
+    def _seed_for(self, scaffold_id: str) -> Seed:
         seed_id = scaffold_id.split(".", 1)[1]
         for seed in self.cfg.target.seeds:
             if seed.id == seed_id:
-                return seed.contigs
+                return seed
         raise KeyError(f"no seed named {seed_id!r} in target {self.cfg.target.name!r}")
 
     def run_scaffold(self, seed: Seed, gpu_pool: GpuPool) -> ScaffoldSearch:

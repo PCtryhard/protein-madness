@@ -75,6 +75,14 @@ def build_command(
         cmd += ["--fixed_residues", fixed_residues]
     if cfg.omit_AA:
         cmd += ["--omit_AA", cfg.omit_AA]
+    # Without the atom context LigandMPNN is not ligand-aware at all, which
+    # defeats the point of using it over ProteinMPNN. The cluster's own
+    # launcher passes both.
+    cmd += ["--ligand_mpnn_use_atom_context", "1" if cfg.use_atom_context else "0"]
+    cmd += [
+        "--ligand_mpnn_use_side_chain_context",
+        "1" if cfg.use_side_chain_context else "0",
+    ]
     if cfg.pack_side_chains:
         cmd += ["--pack_side_chains", "1", "--number_of_packs_per_design", "1"]
     if seed is not None:

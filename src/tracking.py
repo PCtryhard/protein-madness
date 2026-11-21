@@ -315,8 +315,37 @@ def _split_cif_row(line: str) -> list[str]:
 
 
 def read_structure(path: str | Path, ligand_resname: str | None = None) -> Structure:
-    """Dispatch on suffix. Boltz writes .cif, RFdiffusion and pdbfixer .pdb."""
-    suffix = Path(path).suffix.lower()
+    """Dispatch on suffix. Boltz writes .cif, RFD3 .cif.gz, pdbfixer .pdb.
+
+    Gzip is handled by decompressing to a temporary file rather than teaching
+    both readers about streams: RFD3 structures are a few hundred kB and this
+    keeps one code path for parsing.
+    """
+    path = Path(path)
+    name = path.name.lower()
+
+    if name.endswith((".cif.gz", ".mmcif.gz", ".pdb.gz")):
+        import gzip
+        import tempfile
+
+        inner = name[: -len(".gz")]
+        suffix = ".pdb" if inner.endswith((".pdb", ".ent")) else ".cif"
+        with gzip.open(path, "rb") as source:
+            data = source.read()
+        with tempfile.NamedTemporaryFile(
+            suffix=suffix, delete=False, mode="wb"
+        ) as tmp:
+            tmp.write(data)
+            tmp_path = Path(tmp.name)
+        try:
+            structure = read_structure(tmp_path, ligand_resname)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+        # Report the real file, not the temporary one, in any error message.
+        structure.source = str(path)
+        return structure
+
+    suffix = path.suffix.lower()
     if suffix in (".cif", ".mmcif"):
         return read_cif(path, ligand_resname)
     if suffix in (".pdb", ".ent"):
@@ -376,8 +405,117 @@ def seed_to_hal_map(trb_path: str | Path, motif: MotifCfg) -> dict[ResKey, ResKe
     return mapping
 
 
+def write_pdb(structure: Structure, path: str | Path) -> Path:
+    """Write a parsed Structure back out as a PDB.
+
+    Needed because the two tools disagree on format: RFD3 writes a gzipped
+    mmCIF and LigandMPNN reads a PDB. Converting through our own reader rather
+    than shelling out to a converter keeps one definition of what an atom is,
+    and leaves an inspectable .pdb next to the backbone.
+
+    Atom order follows the residue numbering, with the ligand last as HETATM.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    serial = 1
+
+    def atom_line(record, name, resname, chain, resnum, xyz):
+        element = next((c for c in name if c.isalpha()), "X").upper()
+        padded = name.ljust(4) if len(name) >= 4 else f" {name:<3}"
+        return (
+            f"{record:<6}{serial:>5} {padded}{'':1}{resname:>3} "
+            f"{chain}{resnum:>4}{'':4}"
+            f"{xyz[0]:>8.3f}{xyz[1]:>8.3f}{xyz[2]:>8.3f}"
+            f"{1.00:>6.2f}{0.00:>6.2f}{'':10}{element:>2}"
+        )
+
+    for chain, resnum in sorted(structure.residues):
+        resname = structure.residues[(chain, resnum)]
+        names = [n for c, r, n in structure.atoms if (c, r) == (chain, resnum)]
+        for name in sorted(names, key=lambda n: (n != "N", n != "CA", n)):
+            lines.append(atom_line(
+                "ATOM", name, resname, chain, resnum,
+                structure.atoms[(chain, resnum, name)],
+            ))
+            serial += 1
+
+    if structure.ligand:
+        resname = structure.ligand_resname or "LIG"
+        # A residue number past the protein, so it cannot collide.
+        lig_resnum = (max((r for _, r in structure.residues), default=0) + 1)
+        for name, xyz in sorted(structure.ligand.items()):
+            lines.append(atom_line("HETATM", name, resname, "A", lig_resnum, xyz))
+            serial += 1
+
+    lines.append("END")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def _parse_residue_label(label: str, where: str) -> ResKey:
+    """"A229" -> ("A", 229). RFD3 labels residues this way throughout."""
+    label = label.strip()
+    if len(label) < 2 or not label[1:].lstrip("-").isdigit():
+        raise MotifTraceError(
+            f"{where}: cannot read {label!r} as a chain/residue label; "
+            "expected something like 'A229'"
+        )
+    return label[0], int(label[1:])
+
+
+def seed_to_hal_map_rfd3(
+    metadata_path: str | Path, motif: MotifCfg
+) -> dict[ResKey, ResKey]:
+    """Build the seed -> RFD3-output residue map from the metadata JSON.
+
+    RFD3's equivalent of RFdiffusion's `.trb`. The metadata written beside each
+    structure holds
+
+        {"diffused_index_map": {"A229": "A56", "A291": "A179"}}
+
+    mapping each held residue from the input numbering to where it ended up in
+    the generated chain.
+
+    A motif residue missing from that map stops the run, for the same reason it
+    does on the RFdiffusion path: the alternative is a design whose motif
+    silently moved, scored as though it had not.
+    """
+    path = Path(metadata_path)
+    if not path.is_file():
+        raise MotifTraceError(
+            f"RFD3 metadata not found: {path}. Without it the motif cannot be "
+            "traced; check that dump_prediction_metadata_json was passed."
+        )
+    try:
+        metadata = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise MotifTraceError(f"{path} is not valid JSON: {exc}") from exc
+
+    raw = metadata.get("diffused_index_map")
+    if not isinstance(raw, dict) or not raw:
+        raise MotifTraceError(
+            f"{path} has no usable 'diffused_index_map'. Keys present: "
+            f"{sorted(metadata)}. The motif mapping lives only there."
+        )
+
+    mapping = {
+        _parse_residue_label(src, str(path)): _parse_residue_label(dst, str(path))
+        for src, dst in raw.items()
+    }
+
+    missing = sorted(motif.as_keys() - set(mapping))
+    if missing:
+        raise MotifTraceError(
+            f"{path}: motif residues {missing} are absent from "
+            f"diffused_index_map, which mapped {sorted(mapping)}. The target's "
+            "motif and the RFD3 input spec disagree."
+        )
+    return mapping
+
+
 # --------------------------------------------------------------------------
-# stage 2: RFdiffusion -> LigandMPNN (identity, but asserted)
+# stage 2: diffusion output -> LigandMPNN (identity, but asserted)
 # --------------------------------------------------------------------------
 
 

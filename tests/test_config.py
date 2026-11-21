@@ -139,11 +139,19 @@ def test_min_delta_at_noise_level_is_rejected(pipeline_path):
         PipelineCfg.model_validate(raw)
 
 
-def test_partial_T_must_be_below_diffuser_T(pipeline_path):
+def test_rfdiffusion_is_optional_and_null_by_default(pipeline_path):
+    """The clusters have RFD3. The RFdiffusion wrapper stays in the tree for a
+    cluster that has the other tool, but no profile configures it."""
+    cfg = load_pipeline(pipeline_path)
+    assert cfg.rfdiffusion is None
+    assert cfg.rfd3.binary
+
+
+def test_rfd3_checkpoint_is_required(pipeline_path):
+    """A missing checkpoint is a startup error, not a crash an hour in."""
     raw = yaml.safe_load(pipeline_path.read_text(encoding="utf-8"))
-    raw["rfdiffusion"]["partial_T"] = 50
-    raw["rfdiffusion"]["diffuser_T"] = 50
-    with pytest.raises(ValidationError, match="must be below"):
+    del raw["rfd3"]["checkpoint"]
+    with pytest.raises(ValidationError, match="checkpoint"):
         PipelineCfg.model_validate(raw)
 
 
@@ -371,7 +379,7 @@ SMALL = "config/pipeline.small.yaml"
 def test_small_profile_loads():
     cfg = load_pipeline(ROOT / SMALL)
     assert cfg.run.max_cycles == 0, "the small profile is meant to be seed-only"
-    assert cfg.rfdiffusion.designs_per_parent == 10
+    assert cfg.rfd3.n_batches == 10
     assert cfg.ligandmpnn.sequences_per_backbone == 8
 
 
@@ -416,10 +424,10 @@ def test_wiggle_backbone_count_can_differ_from_cycle_zero(pipeline_path):
     """Cycle 0 wants breadth from one seed; a wiggle wants a few neighbours of
     something already good. One number cannot serve both."""
     raw = yaml.safe_load(pipeline_path.read_text(encoding="utf-8"))
-    raw["rfdiffusion"]["designs_per_parent"] = 5
+    raw["rfd3"]["n_batches"] = 5
     raw["search"]["wiggle"]["designs_per_parent"] = 2
     cfg = PipelineCfg.model_validate(raw)
-    assert cfg.rfdiffusion.designs_per_parent == 5
+    assert cfg.rfd3.n_batches == 5
     assert cfg.search.wiggle.designs_per_parent == 2
 
 
@@ -459,7 +467,7 @@ def test_all_profiles_have_the_same_keys():
 def test_the_first_run_profile_matches_the_requested_shape():
     """5 backbones, 3 sequences each, 2 wiggles and 2 mutations per parent."""
     cfg = load_pipeline(ROOT / "config/pipeline.first.yaml")
-    assert cfg.rfdiffusion.designs_per_parent == 5
+    assert cfg.rfd3.n_batches == 5
     assert cfg.ligandmpnn.sequences_per_backbone == 3
     assert cfg.search.wiggle.designs_per_parent == 2
     assert cfg.search.mutate.max_mutants_per_parent == 2

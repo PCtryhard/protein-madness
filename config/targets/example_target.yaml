@@ -16,9 +16,9 @@
 name: example_target
 
 seeds:
-  - {id: seed_a, pdb: inputs/seed_a.pdb, contigs: "20-40/A45-49/10-30/A102-102/20-40"}
-  - {id: seed_b, pdb: inputs/seed_b.pdb, contigs: "20-40/A45-49/10-30/A102-102/20-40"}
-  - {id: seed_c, pdb: inputs/seed_c.pdb, contigs: "20-40/A45-49/10-30/A102-102/20-40"}
+  - {id: seed_a, pdb: inputs/seed_a.pdb, contig: "120-160"}
+  - {id: seed_b, pdb: inputs/seed_b.pdb, contig: "120-160"}
+  - {id: seed_c, pdb: inputs/seed_c.pdb, contig: "120-160"}
 
 ligand:
   id: LIG
