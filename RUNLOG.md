@@ -236,6 +236,64 @@ change breaks any of them, the change is wrong.
 
 ---
 
+## 13. First real scores on our own de novo designs ✅ — Euler 21817976/81
+
+48 designs folded (10.7 min, 2 GPUs), scored at 1 triage seed. **36 of 48 pass
+the hard gates.** Top of the table:
+
+```
+design                      arm    base  donor    ang   iPDE  bur  pLDDT   cost
+Kemp_denovo_bd_1_T0.1_1     bd     2.36   3.48  135.2   0.80   53  0.959   0.65
+Kemp_denovo_bd_1_T0.2_1     bd     2.39   3.80  125.0   1.37   50  0.918   1.00
+Kemp_denovo_bdw_1_T0.1_3    bdw    3.46   4.01  165.4   1.35   48  0.925   1.07
+Kemp_denovo_bd_1_T0.2_3     bd     3.14   4.08  151.7   1.21   49  0.875   1.09
+Kemp_denovo_bd_1_T0.1_2     bd     2.84   4.16  133.4   1.52   47  0.832   1.26
+```
+
+**The best design matches or beats the real evolved enzyme on every axis:**
+
+| | our best | HG3.17 crystal | organisers' reference |
+|---|---|---|---|
+| base `OD2→N3` | **2.36 Å** | 2.53 Å | 11.18 Å |
+| base angle | 135.2° | 130.9° | — |
+| burial | **53** | 47 | 30 |
+| iPDE | **0.80** | — | 2.55 |
+| pLDDT | 0.959 | — | 0.820 |
+
+That is a 45-second de novo backbone, re-predicted from sequence alone,
+holding its catalytic contact tighter than a laboratory-evolved enzyme.
+
+### The backbone dominates, not the sequence
+
+`bd_1` produced **7 of the top 12** designs. `bdw_3` produced the **8 worst**,
+every one between 23 and 27 Å. Sequence design and temperature barely move a
+design compared with which backbone it came from.
+
+### Gate A did NOT predict which backbones would work ⚠️
+
+This matters and it is uncomfortable:
+
+| backbone | Gate A burial | Gate A rmsdB | median base contact after folding |
+|---|---|---|---|
+| `bd_1` | 46 | 0.33 | **2.84 Å** — best |
+| `bdw_3` | **53** (2nd best) | 0.54 | **26.4 Å** — worst |
+
+`bdw_3` looked *good* on the free metrics and produced garbage. The free
+backbone metrics measure the structure **we designed**; what decides the score
+is the structure **Boltz rebuilds**, and §1 already showed those can differ by
+9 Å. Gate A is still worth running — it is free, and it caught the TM failures
+— but **it cannot be trusted to rank backbones.** Fold a couple of sequences
+per backbone and rank on that instead.
+
+### Trp44 arm: no evidence of benefit yet
+
+`bd` median 4.73 Å, `bdw` median 10.89 Å. But that gap is driven almost
+entirely by `bdw_3` being catastrophic, and `bdw_1` sits third overall. With
+two usable backbones per arm, backbone quality swamps any arm effect. **Not
+decided.**
+
+---
+
 ## Open and unresolved
 
 | | State |
