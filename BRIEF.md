@@ -68,6 +68,54 @@ re-implement exactly this, atom name for atom name**, and treat anything we add
 on top (angles, dihedrals, π-stack to Trp) as a secondary signal, never a
 substitute.
 
+### MEASURED: what the organisers' own reference design actually scores
+
+Verification job 1 completed on AWS (`ALL PARTICIPANT VERIFICATION CHECKS
+PASSED`). Its `summary.json` is the most useful document we have, because it is
+a worked example of the whole scoring chain on a real 260-residue design. Three
+numbers out of it reshape the plan.
+
+**1. The geometry collapses between design and re-prediction.**
+
+| Contact | RFD3 design | Boltz-2 re-prediction |
+|---|---|---|
+| `A127 OD2 → 6NT N3` (catalytic base) | **2.53 Å** | **11.18 Å** |
+| `A50 NE2 → 6NT N1` (H-bond donor) | **3.09 Å** | **7.48 Å** |
+
+RFD3 built a textbook active site — 2.5 Å base-to-ligand, motif held to within
+0.013 Å. Boltz-2, re-folding from **sequence alone**, put the ligand **11 Å away
+from the catalytic base**. By the very model that scores us, the organisers'
+reference design is catalytically dead.
+
+**This is the whole problem, stated in one table.** It is not a flaw in the
+example; it is what the task actually is. RFD3 and LigandMPNN can place a
+perfect active site, and the thing that decides our score is whether that site
+*survives being re-predicted from sequence*. Closing the 2.5 Å → 11.18 Å gap is
+the optimisation problem, and it is exactly what the evolution loop in §4 is for.
+
+It also means **the bar is low and the signal is huge.** A design whose Boltz
+base-to-ligand distance is 4 Å instead of 11 Å is dramatically better than the
+reference, and there is an enormous dynamic range to climb.
+
+**2. Boltz-2 costs 21 seconds, not minutes.** From the log:
+`Predicting DataLoader 0: 100%|...| 1/1 [00:21<00:00]` — one 260-residue
+complex, 200 sampling steps, 3 recycling steps, on one L4. **Compute is not our
+bottleneck.** See §4.1, which is rewritten around this.
+
+**3. The MSA is confirmed useless for de novo designs.**
+`kemp_design: {depth: 1, nonquery_rows: 0}` against the natural control's
+`depth: 301`. The §2 shortcut is not a hope, it is measured: **drop MMseqs2 from
+the design loop.**
+
+Baseline to beat, from the same run: `complex_ipde` **2.55**, `iptm` 0.749,
+`complex_plddt` 0.820, 2 ligand–protein pairs below 2.2 Å (i.e. mild clashes),
+backbone CA-RMSD design-to-prediction 2.16 Å. LigandMPNN reported
+`overall_confidence` 0.543, `ligand_confidence` 0.510.
+
+Also useful: in the 260-residue design the mapped catalytic positions were
+**base `A127` → position 177, donor `A50` → position 99**. Those are the
+positions the mutation operator must never touch (§4.2).
+
 ### The motif, and the ligand we never take out
 
 `inputs/HG3_17_kemp_motif.pdb` + `inputs/Kemp.json`, derived from HG3.17:
@@ -303,27 +351,43 @@ This is the centre of the repo now, the way `src/score/` was before. It is a
 generational loop with an explicit state directory, driven by Slurm array jobs,
 fully resumable.
 
-### 4.1 Start with one backbone, and measure
+### 4.1 MEASURED: compute is not the bottleneck
 
-We do not know what Boltz-2 costs at 260 residues on an L4. Nobody does yet. So
-generation 0 is deliberately one backbone and a small founder population, and
-its first job is **to produce the timing number**.
+Gate 1 is answered. **One 260-residue Boltz-2 fold with ligand takes 21 seconds
+on an L4** at the organisers' own settings (200 sampling steps, 3 recycling
+steps, 1 diffusion sample). That is roughly an order of magnitude cheaper than
+this brief originally assumed.
 
-From that measurement the rest follows arithmetically:
+Budget, being deliberately pessimistic — call it 45 s per fold once model load
+is amortised across a batch, and 2 GPUs for 20 usable hours:
 
 ```
-generations ≈ (GPU-hours × 60) / (children_per_gen × seeds_per_child × minutes_per_fold)
+2 × 20 × 3600 / 45  ≈  3200 folds
 ```
 
-Illustrative only, pending the real number: at 4 min/fold, 16 children/gen at 1
-triage seed, plus 5-seed confirmation of the top 4, is ~2.2 GPU-h per
-generation → roughly 18–20 generations across the weekend on two GPUs. If the
-measurement comes back at 10 min/fold, that becomes 7 generations and we
-immediately cut the population, not the generation count — **depth of lineage is
-what this method buys; width is what RFD3 already gave us.**
+At 5 seeds per confirmed design that is **~640 fully confirmed designs**, or far
+more if most folds are single-seed triage. For comparison, the original plan
+feared 18 generations of 16 children.
 
-Decide population size *after* Gate 1, from the measurement. Everything in this
-section is parameterised, nothing is hardcoded.
+**So the scarce resource is no longer GPU time. It is our own judgement about
+what to generate and how to select.** Three consequences:
+
+1. **Widen the funnel.** Population per generation should be in the dozens, not
+   a handful. More RFD3 backbones as founders, more LigandMPNN sequences each.
+2. **Be generous with seeds.** The consistency metric (§4.4) is cheap now.
+   Confirm on 5 seeds routinely rather than only for elites, and stop worrying
+   about the cost of honest selection.
+3. **Spend the surplus on calibration and controls** (§6), not on more designs
+   we cannot defend. The bottleneck has moved to *knowing which design is good*,
+   which is precisely what §6 addresses.
+
+Do still start with one backbone for generation 0 — not to measure cost, but to
+get the loop end-to-end before scaling it. Everything stays parameterised.
+
+**Caveat worth keeping:** 21 s is the predict step alone. Model load, I/O and
+Slurm scheduling are extra, which is exactly why the batched driver (§4.3) still
+matters — it is now the difference between 21 s and 21 s + a minute of overhead
+per design, not a question of whether we can afford to fold at all.
 
 ### 4.2 The mutation operator
 
@@ -479,10 +543,24 @@ certain about, and certainty comes from many-sided contact: a deep, well-packed
 pocket, not a surface groove. Keep `ligand_mpnn_use_atom_context 1` and
 `use_side_chain_context 1`. Rank by buried fraction of 6NT SASA at Gate A.
 
-**Geometry (metric 2) → RFD3 preserves it, Boltz loses it.** RFD3 holds the
-fixed atoms by construction, so RFD3 geometry carries almost no information.
-What matters is whether **Boltz reproduces it**, which is why geometry is scored
-after the refold, never on the design.
+**Geometry (metric 2) → RFD3 preserves it, Boltz loses it. This is now measured,
+not predicted: 2.53 Å in the design, 11.18 Å in the re-prediction** (§1). RFD3
+holds the fixed atoms by construction, so RFD3 geometry carries almost no
+information — the reference design's motif was held to 0.013 Å and still
+collapsed. What matters is only whether **Boltz reproduces it**, which is why
+geometry is scored after the refold, never on the design.
+
+**This is the primary optimisation target and should dominate the fitness
+function.** Everything else — iPDE, burial — is a supporting signal. A design
+that holds the base within 4 Å in the Boltz prediction is already far beyond the
+reference, and the gap from 11 Å gives us a huge dynamic range to select on.
+
+Hypotheses worth testing early, since the loop's whole job is closing this gap:
+the pocket may be too open (favour enclosure, §5 iPDE lever); the 2 sub-2.2 Å
+clashes in the reference suggest strain the model relieves by ejecting the
+ligand; a three-residue motif with the Trp44 π-stack may anchor the ligand far
+better than two polar contacts alone — which turns the §5 A/B below from a nice
+experiment into the first thing to try.
 
 **Consistency (metric 4) → see §4.4.** It is both a metric and the thing that
 keeps selection honest.
@@ -819,23 +897,26 @@ the plan, not that we debug past it.
 - [ ] Ask an organiser for **`SUBMISSION.md`**.
 - [ ] Phase 0 reading, together, out loud.
 
-**GATE 1 — the example runs end to end, and we know what one Boltz fold costs.**
-Until we have minutes-per-fold at 260 residues on an L4, every population and
-generation number in §4 is a guess and no plan is real.
+**GATE 1 — PASSED.** Verification job 1 completed, all checks passed, and one
+260-residue Boltz-2 fold costs **21 s** on an L4. Compute is not the bottleneck;
+§4.1 is rewritten around this. The run also handed us the baseline to beat and
+the geometry-collapse finding in §1.
 
 **GATE 2 — `src/score/official.py` reproduces the example's own summary.**
 If our metric does not match theirs on their own run, our ranking is fiction and
 the evolution loop is optimising the wrong thing. Blocks everything downstream.
 
-**GATE 3 — MSA decision made and written down.** Doubles or halves throughput.
-Decide by early afternoon, not by evening.
+**GATE 3 — PASSED.** The MSA question is settled empirically: the de novo design
+got `depth: 1, nonquery_rows: 0` while the natural control got 301. **Drop
+MMseqs2 from the design loop**, keep it for the eligibility check (§7).
 
-**GATE 3b — Euler: does Boltz-2 fit in 11 GB?** The account (`es_workshop`) and
-the reservation (32 idle 2080Ti's until Sunday 20:00) are confirmed; the only
-open question is VRAM. A synthetic 260-residue sequence plus 6NT, one fold, peak
-memory watched. **This gate is worth more than any other on the list: passing it
-multiplies our folding capacity by sixteen.** Failing it costs an hour and we
-fall back to §8.4.
+**GATE 3b — Euler: does Boltz-2 fit in 11 GB?** *Demoted.* With folds at 21 s,
+AWS alone affords thousands of them, so Euler is no longer the difference
+between a plan and no plan — it is spare capacity. Finish the probe because it
+is nearly done and cheap, but **do not spend more team-hours on Euler than the
+probe itself.** One warning sign already: the AWS log shows Boltz-2 running
+`bfloat16 Automatic Mixed Precision`, and the 2080Ti's sm_75 has no bf16. The
+probe will say whether it falls back gracefully or not.
 
 **GATE 3c — do both clusters agree?** Same sequence, same seed, same flags, both
 clusters (§8.2). Until this passes, Euler folds may be used for triage but must
