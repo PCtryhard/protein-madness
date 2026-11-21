@@ -265,3 +265,57 @@ def test_missing_new_terms_do_not_break_scoring():
     minimal = {"base_to_ligand_a_mean": 3.0, "ipde_mean": 2.0,
                "base_burial_ca_count_mean": 40.0}
     assert math.isfinite(fitness(minimal))
+
+
+# ------------------------------------------------- calibration against reality
+
+#: Measured on PDB 4BS0 (HG3.17 + 6NT, 1.09 A) with our own metrics.
+#: If a real, highly active Kemp eliminase does not score well here, our
+#: ranking of de novo designs is meaningless.
+HG317 = {
+    "base_to_ligand_a_mean": 2.53, "donor_to_ligand_a_mean": 3.10,
+    "base_angle_deg_mean": 130.9, "donor_angle_deg_mean": 133.6,
+    "base_burial_ca_count_mean": 47.0, "ipde_mean": 2.0,
+}
+#: The organisers' own de novo reference design, measured in job 1.
+REFERENCE_DESIGN = {
+    "base_to_ligand_a_mean": 11.178812, "donor_to_ligand_a_mean": 7.478555,
+    "base_burial_ca_count_mean": 30.0, "ipde_mean": 2.5525,
+}
+
+
+def test_a_real_kemp_eliminase_beats_the_reference_design():
+    """The sanity check the whole ranking rests on."""
+    from src.evolve.select import fitness
+    assert fitness(HG317) < fitness(REFERENCE_DESIGN)
+
+
+def test_the_real_enzyme_pays_no_geometry_penalty_at_all():
+    """HG3.17's contacts and angles should sit in the free region. If they do
+    not, our 'ideal' is wrong, not the enzyme."""
+    from src.evolve.select import FitnessWeights, contact_penalty
+    w = FitnessWeights()
+    assert contact_penalty(HG317["base_to_ligand_a_mean"]) == 0.0
+    assert contact_penalty(HG317["donor_to_ligand_a_mean"]) == 0.0
+    for key in ("base_angle_deg_mean", "donor_angle_deg_mean"):
+        assert abs(HG317[key] - w.ideal_angle_deg) <= w.angle_tolerance_deg
+
+
+def test_the_real_enzyme_passes_the_hard_gates():
+    from src.evolve.select import passes_gates
+    ok, reasons = passes_gates(HG317, "A" * 260)
+    assert ok, f"HG3.17 was rejected by our own gates: {reasons}"
+
+
+def test_burial_target_is_set_from_the_real_enzyme_not_the_failing_design():
+    from src.evolve.select import FitnessWeights
+    w = FitnessWeights()
+    assert w.burial_target >= 45.0
+    assert w.burial_target > REFERENCE_DESIGN["base_burial_ca_count_mean"]
+
+
+def test_knocking_out_the_catalytic_base_is_punished():
+    """Move the base out of contact and the design must get clearly worse."""
+    from src.evolve.select import fitness
+    knockout = dict(HG317, base_to_ligand_a_mean=9.0)
+    assert fitness(knockout) > fitness(HG317) + 3.0

@@ -48,16 +48,23 @@ class FitnessWeights:
     ipde: float = 0.5
     #: Burial shortfall below the target, per CA atom.
     burial: float = 0.05
-    #: Target burial. The reference design scores 30; aim above it.
-    burial_target: float = 35.0
+    #: Target burial. **Measured on a real enzyme**: HG3.17 (4BS0) buries its
+    #: catalytic aspartate with 47 CA atoms inside 12 A, and its Q50A variant
+    #: (6SS1) with 48. The organisers' de novo reference design manages only
+    #: 30. Aiming at the real enzyme is better founded than aiming just above
+    #: a design we already know fails.
+    burial_target: float = 47.0
     #: Approach angles, per 10 degrees off ideal. Deliberately well below the
     #: distance weights: a mentor's framing, and the right one -- distance is
     #: the dominant signal and angle is a tie-breaker between designs that
     #: already sit at a sensible distance.
     angle: float = 0.15
-    #: Ideal approach angle at an sp2 acceptor, degrees. An approximation, and
-    #: the low weight above is partly because of that.
-    ideal_angle_deg: float = 120.0
+    #: Ideal approach angle, degrees. **Measured, not assumed**: HG3.17's own
+    #: crystal structure (PDB 4BS0, 1.09 A) sits at 130.9 deg for the base and
+    #: 133.6 deg for the donor. An earlier draft of this file guessed 120 deg
+    #: from sp2 geometry, which would have penalised the best known Kemp
+    #: eliminase by 11 deg for being correct.
+    ideal_angle_deg: float = 131.0
     #: Angles this far off ideal cost nothing: within the flat part.
     angle_tolerance_deg: float = 25.0
 

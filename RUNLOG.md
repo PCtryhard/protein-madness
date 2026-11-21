@@ -196,6 +196,46 @@ arrangement, with a regression test. Cost ~5 min on two GPUs; no designs lost.
 
 ---
 
+## 12. Calibration: does a real Kemp eliminase score well on our metrics? ✅
+
+The check the whole ranking rests on. Scored **PDB 4BS0** — HG3.17 with 6NT
+bound at 1.09 Å, about as good as a Kemp eliminase gets — with our own metrics,
+directly on the crystal structure, no folding involved:
+
+| | HG3.17 (4BS0) | 6SS1 (Q50A variant) | Organisers' de novo design |
+|---|---|---|---|
+| base `OD2→N3` | **2.53 Å** | 2.61 Å | **11.18 Å** |
+| donor `NE2→N1` | **3.10 Å** | — (donor mutated away) | 7.48 Å |
+| base angle `CG-OD2···N3` | **130.9°** | 129.2° | — |
+| donor angle `CD-NE2···N1` | **133.6°** | — | — |
+| burial | **47** | 48 | **30** |
+| clashes < 2.2 Å | **0** | 0 | **2** |
+
+Our metrics recognise the real enzyme on every axis. That is the sanity check
+passing.
+
+**It also corrected two numbers I had guessed:**
+
+* `ideal_angle_deg` was **120°**, reasoned from sp2 geometry. The real enzyme
+  sits at **130.9°/133.6°** — we would have penalised HG3.17 by 11° for being
+  correct. Now **131°**, measured.
+* `burial_target` was **35**, set as "a bit above the reference design's 30".
+  The real enzyme buries its base with **47**. Aiming at a design we already
+  know fails was the wrong anchor. Now **47**.
+
+A third control arrives free: **6SS1 is the Q50A donor knockout**. Its donor
+contact is unmeasurable because NE2 does not exist, which exercises the
+NaN-not-zero rule on a real structure rather than a synthetic one.
+
+Note HG3.17 is **299 residues**, over the competition's 260 limit — fine as a
+control, never submittable.
+
+Five tests now pin this: a real Kemp eliminase must beat the reference design,
+must pay zero geometry penalty, and must pass our own hard gates. If a future
+change breaks any of them, the change is wrong.
+
+---
+
 ## Open and unresolved
 
 | | State |
