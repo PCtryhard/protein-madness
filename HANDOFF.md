@@ -86,13 +86,14 @@ exists to make the change visible, not to block it.
 
 ## Then run it
 
-Seed-only first, 10 backbones × 8 sequences per variant:
+Seed-only is the default, 10 backbones × 8 sequences per variant:
 
 ```powershell
 bash cluster/aws/run_all.sh 01 02
 ```
 
-That is roughly an hour per variant. See [cluster/README.md](cluster/README.md)
+That is roughly an hour per variant. It prints which profile it is using and
+whether the run is seed-only or a full search before it starts anything. See [cluster/README.md](cluster/README.md)
 for Euler, and the timing table in
 [config/pipeline.small.yaml](config/pipeline.small.yaml) for where the estimate
 comes from.

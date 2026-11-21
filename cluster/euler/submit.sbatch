@@ -40,6 +40,10 @@ set -euo pipefail
 REPO_DIR="${PM_REPO:-$SLURM_SUBMIT_DIR}"
 ACTIVATE="${PM_ACTIVATE:-$HOME/protein-madness-env/activate.sh}"
 RUN_PREFIX="${PM_RUN_PREFIX:-euler}"
+# Seed-only by default, same reasoning as cluster/aws/run_all.sh. Submit with
+#   sbatch --export=ALL,PM_PIPELINE=config/pipeline.yaml cluster/euler/submit.sbatch
+# for a full search.
+PIPELINE="${PM_PIPELINE:-config/pipeline.small.yaml}"
 
 cd "$REPO_DIR"
 
@@ -65,6 +69,7 @@ echo "================================================================"
 echo " host        : $(hostname)"
 echo " job         : ${SLURM_JOB_ID:-none} task ${INDEX}"
 echo " target      : $TARGET"
+echo " pipeline    : $PIPELINE"
 echo " run name    : $NAME"
 echo " gpus        : ${CUDA_VISIBLE_DEVICES:-unset}"
 echo " started     : $(date -Is)"
@@ -73,10 +78,10 @@ echo "================================================================"
 nvidia-smi --query-gpu=index,name,memory.total --format=csv || true
 
 # Fail before burning the allocation if the config or the target is wrong.
-python -m src.cli smoke --target "$TARGET"
+python -m src.cli smoke --pipeline "$PIPELINE" --target "$TARGET"
 
 # The search. Scores, structures and lineage all land under runs/$NAME/.
-python -m src.cli run --target "$TARGET" --name "$NAME"
+python -m src.cli run --pipeline "$PIPELINE" --target "$TARGET" --name "$NAME"
 
 # A leaderboard per scaffold plus the best design's full lineage.
 python -m src.cli report --run "runs/$NAME" --write

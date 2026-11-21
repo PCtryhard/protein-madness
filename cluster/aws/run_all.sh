@@ -2,9 +2,19 @@
 # Run the seven variant searches on a single machine with no scheduler.
 #
 #   bash cluster/aws/run_all.sh --dry-run        # print what it would do
-#   bash cluster/aws/run_all.sh                  # all seven, one at a time
 #   bash cluster/aws/run_all.sh 01 05            # just these variants
-#   PM_JOBS=1 bash cluster/aws/run_all.sh        # fully serial
+#   bash cluster/aws/run_all.sh                  # all seven, one at a time
+#   bash cluster/aws/run_all.sh --full 01        # a real search, not seed-only
+#
+# THE PROFILE DEFAULTS TO SEED-ONLY.
+#
+# config/pipeline.small.yaml is 10 backbones x 8 sequences with max_cycles 0:
+# about an hour per variant, and it exercises the whole forward pass and writes
+# a leaderboard without committing to a multi-hour search. That is what you
+# want first, so it is the default here rather than something to remember.
+#
+# --full switches to config/pipeline.yaml (max_cycles 12, both branches, 224
+# Boltz-2 calls per cycle). PM_PIPELINE=<path> overrides either.
 #
 # CONCURRENCY, AND WHY THE DEFAULT IS 1
 #
@@ -24,17 +34,41 @@ cd "$REPO_DIR"
 JOBS="${PM_JOBS:-1}"
 RUN_PREFIX="${PM_RUN_PREFIX:-aws}"
 DRY_RUN=0
+FULL=0
 WANTED=()
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --dry-run) DRY_RUN=1 ;;
-        -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
+        --full) FULL=1 ;;
+        -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
         -*) echo "unknown option: $1" >&2; exit 2 ;;
         *) WANTED+=("$1") ;;
     esac
     shift
 done
+
+if [ -n "${PM_PIPELINE:-}" ]; then
+    PIPELINE="$PM_PIPELINE"
+elif [ "$FULL" -eq 1 ]; then
+    PIPELINE="config/pipeline.yaml"
+else
+    PIPELINE="config/pipeline.small.yaml"
+fi
+[ -r "$PIPELINE" ] || { echo "pipeline config not found: $PIPELINE" >&2; exit 1; }
+
+# Say plainly which kind of run this is. Starting a 6-hour search when you
+# meant a 1-hour smoke run is the mistake this line exists to prevent.
+MAX_CYCLES="$(python - "$PIPELINE" <<'PY'
+import sys, yaml
+print(yaml.safe_load(open(sys.argv[1]))["run"].get("max_cycles", "?"))
+PY
+)"
+if [ "$MAX_CYCLES" = "0" ]; then
+    RUN_KIND="seed-only (max_cycles 0)"
+else
+    RUN_KIND="FULL SEARCH (max_cycles $MAX_CYCLES) -- hours per variant"
+fi
 
 mapfile -t ALL_TARGETS < <(ls -1 config/targets/0*.yaml | sort)
 [ "${#ALL_TARGETS[@]}" -gt 0 ] || { echo "no config/targets/0*.yaml found" >&2; exit 1; }
@@ -62,6 +96,8 @@ echo "================================================================"
 echo " host     : $(hostname)"
 echo " repo     : $REPO_DIR"
 echo " variants : ${#TARGETS[@]}"
+echo " pipeline : $PIPELINE"
+echo " kind     : $RUN_KIND"
 echo " parallel : $JOBS run(s) at a time"
 echo " logs     : $LOG_DIR"
 echo "================================================================"
@@ -73,13 +109,13 @@ echo
 # catches a bad config before hours of GPU time rather than after.
 for target in "${TARGETS[@]}"; do
     printf '  checking %-34s ' "$(basename "$target")"
-    if python -m src.cli smoke --target "$target" >/dev/null 2>&1; then
+    if python -m src.cli smoke --pipeline "$PIPELINE" --target "$target" >/dev/null 2>&1; then
         echo "ok"
     else
         echo "FAILED"
         echo
         echo "  smoke test failed for $target. Full output:" >&2
-        python -m src.cli smoke --target "$target" || true
+        python -m src.cli smoke --pipeline "$PIPELINE" --target "$target" || true
         exit 1
     fi
 done
@@ -91,14 +127,14 @@ run_one() {
     local log="$LOG_DIR/${name}.log"
 
     if [ "$DRY_RUN" -eq 1 ]; then
-        echo "  would run: python -m src.cli run --target $target --name $name"
+        echo "  would run: python -m src.cli run --pipeline $PIPELINE --target $target --name $name"
         return 0
     fi
 
     echo "  [$(date +%H:%M:%S)] starting $name  (log: $log)"
     {
         echo "=== $name  started $(date -Is) on $(hostname) ==="
-        python -m src.cli run --target "$target" --name "$name"
+        python -m src.cli run --pipeline "$PIPELINE" --target "$target" --name "$name"
         echo "=== search done, writing report ==="
         python -m src.cli report --run "runs/$name" --write
         echo "=== $name  finished $(date -Is) ==="

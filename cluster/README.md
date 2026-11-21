@@ -74,7 +74,14 @@ That writes phase 0's findings to `runs/hardware_notes.md`, which is where
 mkdir -p runs/slurm && sbatch cluster/euler/submit.sbatch
 ```
 
-An array of 7, one task per variant, two GPUs each. A subset:
+An array of 7, one task per variant, two GPUs each, **seed-only by default**.
+For a full search:
+
+```bash
+sbatch --export=ALL,PM_PIPELINE=config/pipeline.yaml cluster/euler/submit.sbatch
+```
+
+A subset:
 
 ```bash
 sbatch --array=1,5 cluster/euler/submit.sbatch
