@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Callable
 
 from .config import Config, Seed
+from .live import LiveResults
 from .scoring import ScoredDesign, score_design
 from .search import Candidate, ScaffoldSearch, jobs_for, mutants_for_parent
 from .search.wiggle import WiggleJob
@@ -125,6 +126,14 @@ class RunPaths:
     def stage_log(self) -> Path:
         return self.root / "stages.jsonl"
 
+    @property
+    def designs_csv(self) -> Path:
+        return self.root / "designs.csv"
+
+    @property
+    def sequences_fasta(self) -> Path:
+        return self.root / "sequences.fasta"
+
     def design_dir(self, design_id: str) -> Path:
         path = self.root / "structures" / design_id
         path.mkdir(parents=True, exist_ok=True)
@@ -140,6 +149,7 @@ class Runner:
         paths: RunPaths,
         store: DesignStore,
         repo_root: Path | None = None,
+        live: LiveResults | None = None,
     ) -> None:
         self.cfg = cfg
         self.paths = paths
@@ -148,6 +158,10 @@ class Runner:
         self.rng = random.Random(cfg.pipeline.run.seed)
         self._ligand_map_cache: dict[str, str] | None = None
         self._log_lock = threading.Lock()
+        # Appends a CSV row and a FASTA record the moment each design finishes,
+        # so the run directory is readable while the run is still going. Shared
+        # between both workers; it takes its own lock.
+        self.live = live if live is not None else LiveResults(paths.root, cfg)
 
     # ------------------------------------------------------------------
     # stage logging
@@ -306,6 +320,21 @@ class Runner:
             )
         return combined, structure_path, provenance
 
+    def _record(self, row: DesignRow) -> None:
+        """Store a finished design and publish it to the live files.
+
+        The single place both happen, so a design can never reach designs.db
+        without reaching designs.csv -- which is what someone watching the run
+        is actually reading.
+        """
+        self.store.insert(row)
+        try:
+            self.live.append(row)
+        except OSError as exc:
+            # A failure to write the convenience CSV must not lose a design
+            # that is already safely in the database.
+            log.warning("could not append %s to designs.csv: %s", row.design_id, exc)
+
     def submit_or_cache(
         self,
         design_id: str,
@@ -354,7 +383,7 @@ class Runner:
                 structure_path=hit.structure_path,
                 backbone_path=backbone_path or hit.backbone_path,
             )
-            self.store.insert(row)
+            self._record(row)
             return row.to_candidate()
 
         try:
@@ -370,7 +399,7 @@ class Runner:
             # Recorded, not swallowed: the design is errored and the run goes
             # on, but nothing partial is ever scored.
             log.warning("design %s errored: %s", design_id, exc)
-            self.store.insert(
+            self._record(
                 DesignRow(
                     design_id=design_id,
                     parent_id=parent_id,
@@ -410,7 +439,7 @@ class Runner:
             structure_path=str(structure_path),
             backbone_path=backbone_path,
         )
-        self.store.insert(row)
+        self._record(row)
         return row.to_candidate()
 
     # ------------------------------------------------------------------

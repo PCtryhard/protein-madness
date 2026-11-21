@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -145,17 +146,28 @@ class DesignStore:
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(self.path, timeout=30.0)
+        # check_same_thread=False because the GPU worker pool calls insert()
+        # from its worker threads, not from the thread that opened the store.
+        # Without it sqlite raises ProgrammingError on the very first design.
+        # The connection is then NOT safe for concurrent use, so every
+        # statement below is taken under self._lock.
+        self._conn = sqlite3.connect(
+            self.path, timeout=30.0, check_same_thread=False
+        )
         self._conn.row_factory = sqlite3.Row
-        # Two worker processes read and write this file; WAL lets a reader and a
-        # writer proceed at once instead of one blocking the other.
-        self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._lock = threading.RLock()
+        # WAL lets a reader -- `report` in another terminal, or an rsync --
+        # read this file while a worker is writing it.
+        with self._lock:
+            self._conn.execute("PRAGMA journal_mode=WAL")
+        with self._lock:
+            self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.executescript(SCHEMA)
         self._conn.commit()
 
     def close(self) -> None:
-        self._conn.close()
+        with self._lock:
+            self._conn.close()
 
     def __enter__(self) -> DesignStore:
         return self
@@ -169,90 +181,97 @@ class DesignStore:
         """Insert one design. The design_id is the primary key, so a repeat is
         an error rather than a silent overwrite of a scored design."""
         created = row.created_at or datetime.now(timezone.utc).isoformat()
-        try:
-            self._conn.execute(
-                """
-                INSERT INTO designs (
-                  design_id, parent_id, scaffold_id, cycle, branch, mutation,
-                  sequence, seq_hash, score, term_confidence, term_distance,
-                  term_angle, gated, status, error, hbond_raw, extra_metrics,
-                  provenance, structure_path, backbone_path, created_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                """,
-                (
-                    row.design_id, row.parent_id, row.scaffold_id, row.cycle,
-                    row.branch, row.mutation, row.sequence, row.seq_hash,
-                    row.score, row.term_confidence, row.term_distance,
-                    row.term_angle, int(row.gated), row.status, row.error,
-                    row.hbond_raw, row.extra_metrics, row.provenance,
-                    row.structure_path, row.backbone_path, created,
-                ),
-            )
-        except sqlite3.IntegrityError as exc:
-            raise ValueError(
-                f"design_id {row.design_id!r} is already in {self.path}"
-            ) from exc
-        self._conn.commit()
+        with self._lock, self._conn:
+            try:
+                self._conn.execute(
+                    """
+                    INSERT INTO designs (
+                      design_id, parent_id, scaffold_id, cycle, branch, mutation,
+                      sequence, seq_hash, score, term_confidence, term_distance,
+                      term_angle, gated, status, error, hbond_raw, extra_metrics,
+                      provenance, structure_path, backbone_path, created_at
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        row.design_id, row.parent_id, row.scaffold_id, row.cycle,
+                        row.branch, row.mutation, row.sequence, row.seq_hash,
+                        row.score, row.term_confidence, row.term_distance,
+                        row.term_angle, int(row.gated), row.status, row.error,
+                        row.hbond_raw, row.extra_metrics, row.provenance,
+                        row.structure_path, row.backbone_path, created,
+                    ),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise ValueError(
+                    f"design_id {row.design_id!r} is already in {self.path}"
+                ) from exc
 
     # ---- reading ----
 
     def get(self, design_id: str) -> DesignRow | None:
-        cur = self._conn.execute(
-            "SELECT * FROM designs WHERE design_id = ?", (design_id,)
-        )
-        got = cur.fetchone()
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT * FROM designs WHERE design_id = ?", (design_id,)
+            )
+            got = cur.fetchone()
         return _row_to_design(got) if got else None
 
     def by_scaffold(self, scaffold_id: str) -> list[DesignRow]:
-        cur = self._conn.execute(
-            "SELECT * FROM designs WHERE scaffold_id = ? ORDER BY cycle, design_id",
-            (scaffold_id,),
-        )
-        return [_row_to_design(r) for r in cur.fetchall()]
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT * FROM designs WHERE scaffold_id = ? ORDER BY cycle, design_id",
+                (scaffold_id,),
+            )
+            return [_row_to_design(r) for r in cur.fetchall()]
 
     def scaffolds(self) -> list[str]:
-        cur = self._conn.execute(
-            "SELECT DISTINCT scaffold_id FROM designs ORDER BY scaffold_id"
-        )
-        return [r[0] for r in cur.fetchall()]
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT DISTINCT scaffold_id FROM designs ORDER BY scaffold_id"
+            )
+            return [r[0] for r in cur.fetchall()]
 
     def leaderboard(self, scaffold_id: str, limit: int = 20) -> list[DesignRow]:
-        cur = self._conn.execute(
-            """
-            SELECT * FROM designs
-            WHERE scaffold_id = ? AND status = 'scored'
-            ORDER BY score DESC, design_id ASC
-            LIMIT ?
-            """,
-            (scaffold_id, limit),
-        )
-        return [_row_to_design(r) for r in cur.fetchall()]
+        with self._lock:
+            cur = self._conn.execute(
+                """
+                SELECT * FROM designs
+                WHERE scaffold_id = ? AND status = 'scored'
+                ORDER BY score DESC, design_id ASC
+                LIMIT ?
+                """,
+                (scaffold_id, limit),
+            )
+            return [_row_to_design(r) for r in cur.fetchall()]
 
     def ancestry(self, design_id: str) -> list[DesignRow]:
         """The design and every ancestor, via the recursive query."""
-        cur = self._conn.execute(ANCESTRY_SQL, (design_id,))
-        rows = [_row_to_design(r) for r in cur.fetchall()]
+        with self._lock:
+            cur = self._conn.execute(ANCESTRY_SQL, (design_id,))
+            rows = [_row_to_design(r) for r in cur.fetchall()]
         return sorted(rows, key=lambda r: r.cycle)
 
     def max_cycle(self, scaffold_id: str) -> int:
-        cur = self._conn.execute(
-            "SELECT MAX(cycle) FROM designs WHERE scaffold_id = ?", (scaffold_id,)
-        )
-        got = cur.fetchone()[0]
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT MAX(cycle) FROM designs WHERE scaffold_id = ?", (scaffold_id,)
+            )
+            got = cur.fetchone()[0]
         return -1 if got is None else int(got)
 
     def frontier_at(self, scaffold_id: str, cycle: int, keep: int) -> list[DesignRow]:
         """Best `keep` non-gated designs at or before `cycle`. Used by `resume`."""
-        cur = self._conn.execute(
-            """
-            SELECT * FROM designs
-            WHERE scaffold_id = ? AND cycle <= ? AND status = 'scored' AND gated = 0
-            ORDER BY score DESC, design_id ASC
-            LIMIT ?
-            """,
-            (scaffold_id, cycle, keep),
-        )
-        return [_row_to_design(r) for r in cur.fetchall()]
+        with self._lock:
+            cur = self._conn.execute(
+                """
+                SELECT * FROM designs
+                WHERE scaffold_id = ? AND cycle <= ? AND status = 'scored' AND gated = 0
+                ORDER BY score DESC, design_id ASC
+                LIMIT ?
+                """,
+                (scaffold_id, cycle, keep),
+            )
+            return [_row_to_design(r) for r in cur.fetchall()]
 
     # ---- the Boltz-2 cache ----
 
@@ -263,15 +282,16 @@ class DesignStore:
         may have been a transient OOM, and reusing it would make one failure
         permanent for every design that shares the sequence.
         """
-        cur = self._conn.execute(
-            """
-            SELECT * FROM designs
-            WHERE seq_hash = ? AND status IN ('scored', 'gated')
-            ORDER BY created_at ASC LIMIT 1
-            """,
-            (seq_hash,),
-        )
-        got = cur.fetchone()
+        with self._lock:
+            cur = self._conn.execute(
+                """
+                SELECT * FROM designs
+                WHERE seq_hash = ? AND status IN ('scored', 'gated')
+                ORDER BY created_at ASC LIMIT 1
+                """,
+                (seq_hash,),
+            )
+            got = cur.fetchone()
         if got is None:
             self.bump("cache_miss")
             return None
@@ -279,24 +299,27 @@ class DesignStore:
         return _row_to_design(got)
 
     def bump(self, key: str, by: int = 1) -> None:
-        self._conn.execute(
-            """
-            INSERT INTO cache_stats (key, value) VALUES (?, ?)
-            ON CONFLICT(key) DO UPDATE SET value = value + ?
-            """,
-            (key, by, by),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO cache_stats (key, value) VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = value + ?
+                """,
+                (key, by, by),
+            )
+            self._conn.commit()
 
     def stats(self) -> dict[str, int]:
-        cur = self._conn.execute("SELECT key, value FROM cache_stats")
-        return {r[0]: int(r[1]) for r in cur.fetchall()}
+        with self._lock:
+            cur = self._conn.execute("SELECT key, value FROM cache_stats")
+            return {r[0]: int(r[1]) for r in cur.fetchall()}
 
     def counts_by_status(self) -> dict[str, int]:
-        cur = self._conn.execute(
-            "SELECT status, COUNT(*) FROM designs GROUP BY status"
-        )
-        return {r[0]: int(r[1]) for r in cur.fetchall()}
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT status, COUNT(*) FROM designs GROUP BY status"
+            )
+            return {r[0]: int(r[1]) for r in cur.fetchall()}
 
 
 def _row_to_design(row: sqlite3.Row) -> DesignRow:

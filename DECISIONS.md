@@ -266,3 +266,36 @@ Why: lexicographic order would prefer the shipped `5fqj-6cf4761` over a new
 `01_refold`, silently generating targets from the old clashing files. Mtime
 matches what anyone dropping a folder in means. Nothing is deleted, so the
 originals stay for comparison.
+
+---
+
+**2026-11-21 — `DesignStore` opens sqlite with `check_same_thread=False` and serialises every statement behind an RLock.**
+Found by writing a test that simulates the real threading model: two workers
+inserting at once.
+Why this was urgent: `sqlite3.connect()` defaults to `check_same_thread=True`,
+and the GPU worker pool calls `store.insert()` from its worker threads, not from
+the thread that opened the store. The pipeline would have raised
+`ProgrammingError` on the very first design — on the cluster, after the first
+RFdiffusion call — and nothing in the suite exercised two threads writing, so
+nothing caught it. `check_same_thread=False` alone is not enough, because a
+sqlite connection is then not safe for concurrent use, hence the lock.
+`tests/test_live.py::test_the_store_is_usable_from_another_thread` is the
+regression.
+
+**2026-11-21 — The run directory is readable while the run is going: designs.csv, sequences.fasta, progress.txt, appended per design.**
+`src/live.py`. Every append is taken under a lock, then flushed AND fsynced.
+Why: a multi-hour search whose output only becomes readable at the end tells you
+nothing about whether it is working, and anything that has to reach another
+machine must be copyable mid-run. The fsync is what makes a row safe for a
+reader on another host or an rsync to see — without it a reader can catch a
+truncated line. A design takes minutes, so an fsync per row costs nothing.
+The CSV carries a column per hydrogen bond, names the bond that gated a design
+rather than only flagging it, and gives errored designs a row with the error on
+it. Structures needed no change: the stage wrappers already write to their final
+paths rather than to temporary directories, so a backbone or a prediction is
+complete on disk while the next design is still folding.
+
+**2026-11-21 — `designs.csv` and `sequences.fasta` are not gitignored; everything else under `runs/` is.**
+Why: they are one row per design, they are the result, and the previous pipeline
+committed `leaderboard.csv` the same way. `progress.txt` is transient and is
+ignored, as are the structures, the sqlite files and the slurm logs.

@@ -136,16 +136,59 @@ to at most 143 residues + 12 ligand atoms = 155 tokens, comfortably inside
 wrapper refuses to submit rather than OOM, so an over-long design is logged as
 errored and skipped, not silently truncated.
 
+## Watching a run, and copying it to your own machine
+
+Everything is written as designs finish. Nothing waits for the end.
+
+On the cluster:
+
+```bash
+python -m src.cli watch --run runs/aws-01_his_asp --follow
+tail -f runs/aws-01_his_asp/designs.csv
+cat runs/aws-01_his_asp/progress.txt
+```
+
+`report` also works mid-run — `designs.db` is in WAL mode, so a reader in
+another terminal does not block the workers and sees every design committed so
+far.
+
+On your own machine, repeatedly while the run continues:
+
+```bash
+bash scripts/pull_run.sh me@euler.ethz.ch:/cluster/home/me/protein-madness aws-01_his_asp
+python -m src.cli watch --run runs/aws-01_his_asp
+```
+
+`pull_run.sh` is rsync, so repeating it only moves what changed. By default it
+takes the CSV, the FASTA, the reports, the sqlite file and the final structures
+(`*.cif`, `*.pdb`, the Boltz confidence JSONs, the input YAMLs) but not
+RFdiffusion's intermediate trajectories. `--all` takes everything, which can be
+gigabytes.
+
+One caveat it also prints: copying a sqlite file that is actively being written
+can give a torn snapshot. Mid-run, trust `designs.csv`. If you want a
+consistent copy of a live database, ask sqlite on the cluster:
+
+```bash
+sqlite3 runs/<name>/designs.db ".backup runs/<name>/designs.snapshot.db"
+```
+
 ## What a finished run leaves behind
 
 ```
 runs/<name>/
+  designs.csv         one row per design, appended as it is scored
+  sequences.fasta     the same designs as sequences
+  progress.txt        counts, best so far, designs/hour
   designs.db          sqlite: every design, its score, its lineage, the cache
   report.md           leaderboard + the best design's full ancestry
   structures/         one subdirectory per design (gitignored, large)
   stages.jsonl        per-stage wall time and peak VRAM
   hardware_notes.md   phase 0 findings, from preflight.py
 ```
+
+`designs.csv` and `sequences.fasta` are not gitignored — they are small and
+they are the result. Everything else under `runs/` is.
 
 Re-read a finished or interrupted run without touching a GPU:
 

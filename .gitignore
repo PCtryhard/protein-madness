@@ -6,6 +6,13 @@ runs/*/*.db
 runs/*/*.db-wal
 runs/*/*.db-shm
 runs/*/stages.jsonl
+runs/*/progress.txt
+runs/*/*.tmp
+runs/*/logs/
+runs/slurm/
+# designs.csv and sequences.fasta are deliberately NOT ignored: they are the
+# result, they are small (one row per design), and the previous pipeline
+# committed its leaderboard.csv the same way.
 
 # model weights and databases never go in git
 weights/

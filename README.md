@@ -18,7 +18,7 @@ score stops improving.
 
 ```bash
 python -m src.cli smoke --target config/targets/01_his_asp.yaml   # validate, no GPU
-python -m pytest -q                                               # 269 tests, no GPU
+python -m pytest -q                                               # 288 tests, no GPU
 python cluster/preflight.py                                       # can this box run it?
 python scripts/noise_control.py --from-csv                        # is the score signal?
 ```
@@ -88,6 +88,9 @@ In detail:
 | `src/stages/` — command construction, token guard, output parsing | real, 39 tests; **no model has ever been invoked** |
 | `src/runner.py` — GPU pool and the per-scaffold loop | written, **not covered by tests and never run** |
 | `src/cli.py` — `smoke`, `measure`, `report` | run by hand, work; `run` needs the cluster |
+| `src/live.py` — live CSV, FASTA, progress | real, 19 tests incl. two-thread concurrency |
+| `src/cli.py watch` | run by hand against a simulated run |
+| `scripts/pull_run.sh` | `bash -n` clean; **never run against a real cluster** |
 | `cluster/preflight.py` | run on this laptop; correctly reports what is missing. Never run on either cluster |
 | `cluster/euler/*`, `cluster/aws/*` | `bash -n` clean, `run_all.sh --dry-run` verified; **never submitted** |
 | `scripts/build_targets.py` | generates all 7 targets; a test asserts they are current |
@@ -181,6 +184,44 @@ On Euler, as a 7-task array:
 ```powershell
 sbatch cluster/euler/submit.sbatch
 ```
+
+**Watch it while it runs.** Every design is appended the moment it finishes —
+nothing waits for the end of the run:
+
+```powershell
+python -m src.cli watch --run runs/small-01 --follow
+```
+
+```
+runs/small-01/
+  designs.csv       one row per design, appended and fsynced as it is scored
+  sequences.fasta   the same designs as sequences
+  progress.txt      counts, best so far, designs/hour
+  structures/<design_id>/   the RFdiffusion backbone and the Boltz-2 prediction
+  stages.jsonl      per-stage wall time and peak VRAM
+  designs.db        sqlite, in WAL mode, readable while a worker writes it
+```
+
+`designs.csv` carries the score and every term, a column per hydrogen bond
+(`<bond_id>__distance`, `<bond_id>__angle`), the logged Boltz metrics, the
+sequence, and the paths to that design's backbone and predicted structure.
+Gated designs name the bond that failed; errored designs get a row with the
+error on it, which is most of the value of watching a run.
+
+Structures are written by the tools straight to their final paths, so a
+backbone or a `.cif` is on disk and complete while the next design is still
+folding. `tail -f runs/small-01/designs.csv` works, and so does
+`python -m src.cli report --run runs/small-01` mid-run.
+
+**Copy a run to your own machine, mid-run or after:**
+
+```powershell
+bash scripts/pull_run.sh me@euler.ethz.ch:/cluster/home/me/protein-madness small-01
+```
+
+rsync, so it is safe to repeat while the run continues. By default it pulls the
+CSV, the FASTA, the reports and the final structures but not RFdiffusion's
+intermediate trajectories; `--all` takes everything.
 
 **Report on a finished or interrupted run:**
 

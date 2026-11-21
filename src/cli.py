@@ -3,6 +3,7 @@
     python -m src.cli smoke    --target config/targets/01_his_asp.yaml
     python -m src.cli measure  --target config/targets/01_his_asp.yaml \n                               --pdb data/01/inputs/5fqj-6cf4761/01_his_asp_.pdb
     python -m src.cli run      --target config/targets/01_his_asp.yaml --name run1
+    python -m src.cli watch     --run runs/run1 --follow
     python -m src.cli resume    --run runs/run1
     python -m src.cli report    --run runs/run1
 
@@ -174,6 +175,17 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(f"run       : {run_name}")
     print(f"directory : {paths.root}")
     print(f"scaffolds : {len(cfg.target.seeds)}")
+    print(f"cycles    : {cfg.pipeline.run.max_cycles}"
+          + ("  (seed-only)" if cfg.pipeline.run.max_cycles == 0 else ""))
+    print()
+    print("These are written as each design finishes, not at the end:")
+    print(f"  {paths.designs_csv}")
+    print(f"  {paths.sequences_fasta}")
+    print(f"  {paths.root / 'progress.txt'}")
+    print(f"  {paths.root / 'structures'}/<design_id>/   (backbones and predictions)")
+    print()
+    print("Watch it from another terminal with:")
+    print(f"  python -m src.cli watch --run {paths.root}")
     print()
 
     with DesignStore(paths.db) as store:
@@ -200,6 +212,85 @@ def cmd_resume(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     return 1
+
+
+def cmd_watch(args: argparse.Namespace) -> int:
+    """Print a live view of a run from its CSV. Safe while the run is going.
+
+    Reads designs.csv and progress.txt, which the runner appends to and
+    rewrites as designs finish. Deliberately reads the CSV rather than
+    designs.db: a plain file read cannot block a worker mid-write, and it works
+    just as well on a copy rsynced to another machine.
+    """
+    import time
+
+    run_dir = Path(args.run)
+    csv_path = run_dir / "designs.csv"
+    progress_path = run_dir / "progress.txt"
+
+    if not run_dir.exists():
+        print(f"error: {run_dir} does not exist", file=sys.stderr)
+        return 2
+
+    while True:
+        if progress_path.exists():
+            print(progress_path.read_text(encoding="utf-8").rstrip())
+        else:
+            print(f"(no progress.txt in {run_dir} yet)")
+
+        rows = _read_designs_csv(csv_path)
+        scored = [r for r in rows if r.get("status") == "scored"]
+        if scored:
+            scored.sort(key=lambda r: _as_float(r.get("score")), reverse=True)
+            print()
+            print(f"top {min(args.limit, len(scored))} of {len(scored)} scored:")
+            print(f"  {'score':>7}  {'cycle':>5}  {'branch':<7}  design")
+            for row in scored[: args.limit]:
+                print(f"  {_as_float(row.get('score')):>7.4f}  "
+                      f"{row.get('cycle', ''):>5}  {row.get('branch', ''):<7}  "
+                      f"{row.get('design_id', '')}")
+
+        failed = [r for r in rows if r.get("status") == "errored"]
+        if failed:
+            print()
+            print(f"{len(failed)} errored; most recent:")
+            for row in failed[-args.errors:]:
+                print(f"  {row.get('design_id', '')}: {row.get('error', '')[:120]}")
+
+        if not args.follow:
+            return 0
+        time.sleep(args.interval)
+        print()
+        print("-" * 70)
+        print()
+
+
+def _read_designs_csv(path: Path) -> list[dict]:
+    """Read the live CSV, tolerating a row being appended as we read.
+
+    The writer flushes and fsyncs whole rows, so a torn final line is
+    unlikely -- but it costs nothing to drop one rather than crash a watcher.
+    """
+    if not path.exists():
+        return []
+    import csv as _csv
+
+    with path.open(newline="", encoding="utf-8", errors="replace") as fh:
+        reader = _csv.DictReader(fh)
+        rows = []
+        try:
+            for row in reader:
+                rows.append(row)
+        except _csv.Error:
+            pass
+    return rows
+
+
+def _as_float(value: object) -> float:
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return float("-inf")
 
 
 def _print_run_summary(searches: dict, store: DesignStore) -> None:
@@ -332,6 +423,20 @@ def build_parser() -> argparse.ArgumentParser:
     resume = sub.add_parser("resume", help="not implemented; see `report`")
     resume.add_argument("--run", required=True)
     resume.set_defaults(func=cmd_resume)
+
+    watch = sub.add_parser(
+        "watch", help="live view of a running (or finished) run, from its CSV"
+    )
+    watch.add_argument("--run", required=True)
+    watch.add_argument("--limit", type=int, default=10,
+                       help="how many top designs to show (default 10)")
+    watch.add_argument("--errors", type=int, default=3,
+                       help="how many recent errors to show (default 3)")
+    watch.add_argument("-f", "--follow", action="store_true",
+                       help="keep refreshing instead of printing once")
+    watch.add_argument("--interval", type=float, default=30.0,
+                       help="seconds between refreshes with --follow (default 30)")
+    watch.set_defaults(func=cmd_watch)
 
     report = sub.add_parser("report", help="markdown leaderboard per scaffold")
     report.add_argument("--run", required=True)
