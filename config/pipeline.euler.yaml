@@ -59,11 +59,14 @@ boltz:
   diffusion_samples: 1
   sampling_steps: 200
   use_potentials: false
-  # Euler's A100s are Ampere, so the optimised kernels should work -- but this
-  # has not been confirmed on a real prediction, and a wrong guess here is a
-  # crash mid-run rather than a slowdown. Leave true until phase 0 says so.
+  # MEASURED, not assumed: job 21870275 landed on a TITAN RTX, compute
+  # capability 7.5. Euler's GPU partition also has A100s and 4090s, but the
+  # scheduler gives you whatever is free, so the config has to be correct for
+  # the oldest card it might land on. Turing predates Ampere, so the optimised
+  # Boltz kernels are out and bf16 is unavailable -- which is exactly what
+  # these two settings already said.
   no_kernels: true
-  precision: "32"
+  precision: "32"              # no bf16 on sm_75; see the note above
   max_tokens: 400
   accelerator: gpu
   devices: 1
