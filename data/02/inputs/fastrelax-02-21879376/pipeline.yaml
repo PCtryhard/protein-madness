@@ -1,0 +1,76 @@
+run:
+  name: null
+  seed: 1
+  gpus:
+  - 0
+  max_cycles: 1
+  patience: 2
+  min_delta: 0.005
+  eval_replicates: 1
+rfd3:
+  binary: /cluster/home/kg2616897/rfd3-env/bin/rfd3
+  checkpoint: /cluster/scratch/kg2616897/weights/rfd3/rfd3_latest.ckpt
+  n_batches: 5
+  diffusion_batch_size: 1
+  partial_T: 10
+  extra_args: []
+rfdiffusion: null
+ligandmpnn:
+  run_script: /cluster/home/kg2616897/LigandMPNN/run.py
+  python: /cluster/home/kg2616897/protein-madness-env/bin/python
+  checkpoint: /cluster/scratch/kg2616897/weights/ligandmpnn/ligandmpnn_v_32_010_25.pt
+  temperature: 0.1
+  sequences_per_backbone: 3
+  omit_AA: CX
+  pack_side_chains: false
+  use_atom_context: true
+  use_side_chain_context: true
+boltz:
+  binary: /cluster/home/kg2616897/protein-madness-env/bin/boltz
+  cache_dir: /cluster/scratch/kg2616897/boltz-cache
+  assets_dir: null
+  recycling_steps: 3
+  diffusion_samples: 1
+  sampling_steps: 200
+  use_potentials: false
+  no_kernels: true
+  precision: '32'
+  max_tokens: 400
+  accelerator: gpu
+  devices: 1
+protonation:
+  engine: pdbfixer
+  ph: 7.0
+scoring:
+  weights:
+    confidence: 0.7
+    geometry: 0.3
+  geometry_weights:
+    distance: 0.6
+    angle: 0.4
+  confidence:
+    metric: complex_ipde
+    ipde_best: 0.5
+    ipde_worst: 5.0
+  distance:
+    ideal: 2.9
+    tolerated: 3.5
+    fail: 4.5
+    clash: 2.2
+  angle:
+    tolerance: 60.0
+    rule: acceptor_side_always
+  aggregate: mean
+search:
+  keep_per_cycle: 2
+  wiggle:
+    enabled: true
+    parents_per_cycle: 2
+    source: rfdiffusion_backbone
+    designs_per_parent: 2
+  mutate:
+    enabled: true
+    parents_per_cycle: 2
+    shell_radius: 5.0
+    alphabet: ADEFGHIKLMNQRSTVWY
+    max_mutants_per_parent: 2

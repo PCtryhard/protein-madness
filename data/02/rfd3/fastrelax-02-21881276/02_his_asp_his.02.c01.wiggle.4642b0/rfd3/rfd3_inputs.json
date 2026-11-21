@@ -1,0 +1,14 @@
+{
+  "02_his_asp_his_02_wiggle": {
+    "input": "/cluster/home/kg2616897/protein-madness/runs/fastrelax-02-21881276/structures/02_his_asp_his.02.c00.seed/rfd3/rfd3_inputs_02_his_asp_his_02_2_model_0.pdb",
+    "unindex": "A126,A238,A71",
+    "select_fixed_atoms": {
+      "6NT": "ALL",
+      "A126": "OD1,CG,OD2",
+      "A238": "CD2,CE1,NE2",
+      "A71": "CD2,CE1,NE2"
+    },
+    "partial_t": 10.0,
+    "ligand": "6NT"
+  }
+}

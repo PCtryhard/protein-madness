@@ -1,0 +1,13 @@
+run      : fastrelax-02-21881276
+target   : 02_his_asp_his
+started  : 2026-11-21T22:41:33+00:00
+updated  : 2026-11-21T23:11:00+00:00
+elapsed  : 0h 29m 27s
+
+designs  : 32
+  scored  : 4
+  gated   : 28
+
+best     : 0.5376  02_his_asp_his.02.c00.seed.4642b0
+
+rate     : 0.9 min/design (65 designs/hour)

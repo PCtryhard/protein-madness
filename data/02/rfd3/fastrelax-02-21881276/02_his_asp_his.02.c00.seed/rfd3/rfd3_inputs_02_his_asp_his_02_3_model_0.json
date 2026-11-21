@@ -1,0 +1,70 @@
+{
+    "diffused_index_map": {
+        "A229": "A135",
+        "A261": "A218",
+        "A291": "A9"
+    },
+    "metrics": {
+        "join_point_rmsd_by_token": {
+            "A229": 0.18794453144073486,
+            "A261": 0.8001713156700134,
+            "A291": 1.2213951349258423
+        },
+        "insertion.mae": 1.0485423703988392,
+        "insertion.rmcd": 0.6782208681106567,
+        "insertion_rmsd": 0.7299441198507944,
+        "join_point_rmsd": 0.7365036606788635,
+        "n_conjoined_residues": 0,
+        "max_ca_deviation": 0.07322454452514648,
+        "n_chainbreaks": 0,
+        "n_clashing.interresidue_clashes_w_sidechain": 0,
+        "n_clashing.interresidue_clashes_w_backbone": 0,
+        "n_clashing.ligand_clashes": 0,
+        "n_clashing.ligand_min_distance": 3.8139004707336426,
+        "non_loop_fraction": 0.5615384615384615,
+        "loop_fraction": 0.43846153846153846,
+        "helix_fraction": 0.4269230769230769,
+        "sheet_fraction": 0.1346153846153846,
+        "num_ss_elements": 14,
+        "radius_of_gyration": 16.148368814437077,
+        "alanine_content": 0.3153846153846154,
+        "glycine_content": 0.08461538461538462,
+        "num_residues": 260,
+        "diffused_com": [
+            -2.848841428756714,
+            3.6252408027648926,
+            -3.1416361331939697
+        ],
+        "fixed_com": [
+            0.0009300595265813172,
+            0.001247587613761425,
+            0.0004417782765813172
+        ]
+    },
+    "specification": {
+        "input": "/cluster/home/kg2616897/protein-madness/data/02/inputs/fastrelax-02-21881276/motif.pdb",
+        "contig": "260-260",
+        "unindex": "A229,A261,A291",
+        "ligand": "6NT",
+        "extra": {
+            "example": "02_his_asp_his_02",
+            "task_name": "rfd3_inputs_02_his_asp_his_02",
+            "sampled_contig": "260P",
+            "num_tokens_in": 264,
+            "num_residues_in": 264,
+            "num_chains": 2,
+            "num_atoms": 1321,
+            "num_residues": 265,
+            "example_id": "rfd3_inputs_02_his_asp_his_02_3"
+        },
+        "select_fixed_atoms": {
+            "A229": "OD1,CG,OD2",
+            "A261": "CD2,CE1,NE2",
+            "A291": "CD2,CE1,NE2",
+            "6NT": "ALL"
+        },
+        "select_unfixed_sequence": false
+    },
+    "ckpt_path": "/cluster/scratch/kg2616897/pm-perlin/weights/rfd3/rfd3_latest.ckpt",
+    "seed": 1
+}

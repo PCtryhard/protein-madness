@@ -1,0 +1,14 @@
+{
+  "02_his_asp_his_02": {
+    "input": "/cluster/home/kg2616897/protein-madness/data/02/inputs/fastrelax-02-21881276/motif.pdb",
+    "unindex": "A229,A261,A291",
+    "select_fixed_atoms": {
+      "A229": "OD1,CG,OD2",
+      "A261": "CD2,CE1,NE2",
+      "A291": "CD2,CE1,NE2",
+      "6NT": "ALL"
+    },
+    "contig": "260-260",
+    "ligand": "6NT"
+  }
+}
