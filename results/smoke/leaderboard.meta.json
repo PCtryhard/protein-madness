@@ -1,0 +1,104 @@
+{
+ "n_designs": 60,
+ "n_pass_hard": 60,
+ "n_pass_soft": 57,
+ "stages": [
+  "generate.mutate",
+  "score.tier1"
+ ],
+ "columns": [
+  "design_id",
+  "method",
+  "parent_id",
+  "parent_sequence_id",
+  "mutations",
+  "n_mutations",
+  "notes",
+  "new_cysteines",
+  "sequence_length",
+  "stages",
+  "sequence",
+  "length",
+  "net_charge_ph7",
+  "isoelectric_point",
+  "gravy",
+  "fraction_charged",
+  "fraction_hydrophobic",
+  "max_homopolymer_run",
+  "low_complexity_fraction",
+  "shannon_entropy",
+  "cysteine_count",
+  "unpaired_cys",
+  "sequence_identity",
+  "n_mutations__score.tier1",
+  "unpaired_cys_delta",
+  "net_charge_delta",
+  "catalytic_integrity",
+  "n_catalytic",
+  "catalytic_lost",
+  "catalytic_observed",
+  "low_complexity_flag",
+  "novelty_vs_parent",
+  "pass_hard",
+  "pass_soft",
+  "filters_failed",
+  "n_filters_failed",
+  "score",
+  "score_metrics_missing",
+  "score_terms",
+  "rank"
+ ],
+ "filters": [
+  {
+   "metric": "catalytic_integrity",
+   "op": "==",
+   "value": 1.0,
+   "hard": true
+  },
+  {
+   "metric": "mean_plddt",
+   "op": ">=",
+   "value": 70.0,
+   "hard": false
+  },
+  {
+   "metric": "unpaired_cys_delta",
+   "op": "<=",
+   "value": 0,
+   "hard": false
+  },
+  {
+   "metric": "max_homopolymer_run",
+   "op": "<=",
+   "value": 4,
+   "hard": false
+  }
+ ],
+ "ranking": [
+  {
+   "metric": "mean_plddt",
+   "weight": 1.0,
+   "direction": "higher"
+  },
+  {
+   "metric": "active_site_plddt",
+   "weight": 1.5,
+   "direction": "higher"
+  },
+  {
+   "metric": "catalytic_geometry_worst_dev",
+   "weight": 1.5,
+   "direction": "lower"
+  },
+  {
+   "metric": "self_consistency_rmsd",
+   "weight": 1.0,
+   "direction": "lower"
+  },
+  {
+   "metric": "seq_novelty",
+   "weight": 0.5,
+   "direction": "higher"
+  }
+ ]
+}

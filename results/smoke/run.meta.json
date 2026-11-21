@@ -1,0 +1,17 @@
+{
+ "target": "configs/target.example.yaml",
+ "stages": [
+  "validate",
+  "mutate",
+  "tier1",
+  "leaderboard",
+  "figures"
+ ],
+ "timings_seconds": {
+  "mutate": 0.77,
+  "tier1": 0.8,
+  "leaderboard": 0.74,
+  "figures": 2.42
+ },
+ "total_seconds": 4.72
+}

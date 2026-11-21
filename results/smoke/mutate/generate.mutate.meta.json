@@ -1,0 +1,29 @@
+{
+ "tool": "generate.mutate",
+ "version": "0.1.0",
+ "status": "ok",
+ "git_sha": "62710de",
+ "config_hash": "5a732ba43cd3",
+ "backend": "local",
+ "device": "cpu",
+ "wall_seconds": 0.005,
+ "n_rows": 60,
+ "command": "python -m src.generate.mutate --in /home/yazan/Documents/protein-madness/data/toy/ref.fasta --out results/smoke/mutate --config /home/yazan/Documents/protein-madness/configs/pipeline.yaml --target configs/target.example.yaml --max-designs 60",
+ "argv": [
+  "/home/yazan/Documents/protein-madness/src/generate/mutate.py",
+  "--in",
+  "/home/yazan/Documents/protein-madness/data/toy/ref.fasta",
+  "--out",
+  "results/smoke/mutate",
+  "--config",
+  "/home/yazan/Documents/protein-madness/configs/pipeline.yaml",
+  "--target",
+  "configs/target.example.yaml",
+  "--max-designs",
+  "60"
+ ],
+ "python": "3.12.16",
+ "platform": "Linux-7.2.15-200.fc44.x86_64-x86_64-with-glibc2.43",
+ "timestamp_utc": "2026-11-17T12:02:38Z",
+ "input": "/home/yazan/Documents/protein-madness/data/toy/ref.fasta"
+}
