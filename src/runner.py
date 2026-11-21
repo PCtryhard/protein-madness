@@ -47,6 +47,7 @@ from .store import (
     sequence_hash,
 )
 from .tracking import (
+    compose_seed_to_hal_rfd3,
     write_pdb,
     Provenance,
     TrackingError,
@@ -518,13 +519,25 @@ class Runner:
         branch: str,
         parent_id: str | None,
         gpu: int,
+        parent_seed_to_hal: dict | None = None,
     ) -> list[Candidate]:
-        """LigandMPNN then Boltz-2 then score, for each backbone."""
+        """LigandMPNN then Boltz-2 then score, for each backbone.
+
+        `parent_seed_to_hal` is set on the wiggle path only. Its spec was
+        written in the parent backbone's numbering, so RFD3's index map is
+        keyed by parent residues and has to be composed with the parent's own
+        map instead of looked up by seed residue.
+        """
         out: list[Candidate] = []
         motif = self.cfg.target.motif
 
         for backbone in backbones:
-            seed_to_hal = seed_to_hal_map_rfd3(backbone.metadata, motif)
+            if parent_seed_to_hal is None:
+                seed_to_hal = seed_to_hal_map_rfd3(backbone.metadata, motif)
+            else:
+                seed_to_hal = compose_seed_to_hal_rfd3(
+                    backbone.metadata, parent_seed_to_hal
+                )
             backbone_structure = read_structure(
                 backbone.structure, self.cfg.target.ligand.ccd
             )
@@ -630,21 +643,30 @@ class Runner:
                 repo_root=self.repo_root,
                 key=f"{self.cfg.target.name}_{seed.id}_wiggle",
             )
-            # The wiggle re-noises the parent's backbone, not the seed.
+            # The wiggle re-noises the parent's BACKBONE, not the seed -- and
+            # that backbone carries RFD3's own numbering, not the seed's. The
+            # motif lands at a different index in every backbone (A142/A179 in
+            # one, A149/A10 in the next), so a spec built from the seed names
+            # residues the input file does not have: A291 is simply absent from
+            # a 260-residue backbone. Re-label the spec through the parent's
+            # own seed_to_hal map before handing it over.
             spec = replace(spec, input_pdb=Path(job.backbone_path))
+            spec, parent_seed_to_hal = self._relabel_spec_for_backbone(
+                spec, job.parent_id
+            )
             n = (self.cfg.pipeline.search.wiggle.designs_per_parent
                  or self.cfg.pipeline.rfd3.n_batches)
             self._stage_begin(
                 search.scaffold_id, "rfd3 (wiggle: partial diffusion)",
-                f"parent {job.parent_id}, partial_T="
-                f"{self.cfg.pipeline.rfd3.partial_T}, {n} backbone(s)",
+                f"parent {job.parent_id}, partial_t="
+                f"{self.cfg.pipeline.rfd3.partial_t} A, {n} backbone(s)",
             )
             backbones, stage_result = rfd_stage.run(
                 self.cfg.pipeline.rfd3,
                 specs=[spec],
                 out_dir=design_dir / "rfd3",
                 n_designs=n,
-                partial=True,       # the wiggle: re-noise for partial_T steps
+                partial=True,       # adds partial_t to the design spec
                 gpu=gpu,
                 seed=self.cfg.pipeline.run.seed + search.cycle,
             )
@@ -658,9 +680,59 @@ class Runner:
                 branch="wiggle",
                 parent_id=job.parent_id,
                 gpu=gpu,
+                # The spec was relabelled into this parent's numbering, so the
+                # new index map has to be composed onto the parent's.
+                parent_seed_to_hal=parent_seed_to_hal,
             )
 
         return work
+
+    def _relabel_spec_for_backbone(
+        self, spec: rfd_stage.DesignSpec, parent_id: str
+    ) -> tuple[rfd_stage.DesignSpec, dict]:
+        """Rewrite a seed-numbered spec into the parent backbone's numbering.
+
+        Returns the relabelled spec AND the parent's seed_to_hal map, because
+        the caller needs that map again to compose RFD3's output index map
+        back onto seed numbering.
+
+        `unindex` and `select_fixed_atoms` are keyed by seed residue ("A229").
+        The parent backbone uses RFD3's output numbering, so every label has to
+        go through that design's `seed_to_hal` map. Raises rather than guessing:
+        a wiggle that pins the wrong residues is worse than one that does not
+        run, because nothing downstream would notice.
+        """
+        row = self.store.get(parent_id)
+        if row is None or not row.provenance:
+            raise TrackingError(
+                f"wiggle: no stored provenance for parent {parent_id}, so its "
+                "backbone numbering cannot be resolved"
+            )
+        provenance = Provenance.from_json(row.provenance)
+
+        ligand_id = self.cfg.target.ligand.id
+        fixed: dict[str, str] = {}
+        for label, atoms in spec.select_fixed_atoms.items():
+            if label == ligand_id:
+                # The ligand keeps its residue NAME in the backbone, not a
+                # number, so it needs no remapping.
+                fixed[label] = atoms
+                continue
+            chain, resnum = label[0], int(label[1:])
+            if (chain, resnum) not in provenance.seed_to_hal:
+                raise TrackingError(
+                    f"wiggle: seed residue {label} is not in seed_to_hal for "
+                    f"parent {parent_id}. Mapped: "
+                    f"{sorted(provenance.seed_to_hal)}"
+                )
+            hal_chain, hal_resnum = provenance.seed_to_hal[(chain, resnum)]
+            fixed[f"{hal_chain}{hal_resnum}"] = atoms
+
+        unindex = ",".join(
+            label for label in fixed if label != ligand_id
+        )
+        relabelled = replace(spec, unindex=unindex, select_fixed_atoms=fixed)
+        return relabelled, provenance.seed_to_hal
 
     def mutate_branch(
         self, search: ScaffoldSearch, parents: list[Candidate], gpu_pool: GpuPool

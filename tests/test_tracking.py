@@ -489,3 +489,64 @@ def test_cif_missing_required_columns_raises(tmp_path):
     )
     with pytest.raises(TrackingError, match="lacks"):
         read_structure(path)
+
+
+# --------------------------------------------------------------------------
+# the wiggle's two-hop index map
+# --------------------------------------------------------------------------
+
+
+def _wiggle_metadata(tmp_path, mapping: dict[str, str]) -> Path:
+    import json
+
+    path = tmp_path / "wiggle_0_model_0.json"
+    path.write_text(json.dumps({"diffused_index_map": mapping}), encoding="utf-8")
+    return path
+
+
+def test_compose_seed_to_hal_follows_both_hops(tmp_path):
+    """The wiggle's index map is keyed by the PARENT backbone, not the seed.
+
+    Its spec is relabelled into the parent's numbering so RFD3 accepts it, so
+    the map it writes says parent -> new. The seed numbering only comes back
+    by composing that onto the parent's own seed -> parent map.
+    """
+    from src.tracking import compose_seed_to_hal_rfd3
+
+    parent_seed_to_hal = {("A", 229): ("A", 142), ("A", 291): ("A", 179)}
+    meta = _wiggle_metadata(tmp_path, {"A142": "A71", "A179": "A129"})
+
+    composed = compose_seed_to_hal_rfd3(meta, parent_seed_to_hal)
+
+    assert composed == {("A", 229): ("A", 71), ("A", 291): ("A", 129)}
+
+
+def test_compose_seed_to_hal_raises_when_a_hop_is_missing(tmp_path):
+    """A motif residue that cannot be traced must stop, not be dropped.
+
+    Scoring a wiggle whose motif silently moved is the failure the whole chain
+    of maps exists to prevent.
+    """
+    from src.tracking import MotifTraceError, compose_seed_to_hal_rfd3
+
+    parent_seed_to_hal = {("A", 229): ("A", 142), ("A", 291): ("A", 179)}
+    meta = _wiggle_metadata(tmp_path, {"A142": "A71"})   # A179 absent
+
+    with pytest.raises(MotifTraceError, match=r"A', 179"):
+        compose_seed_to_hal_rfd3(meta, parent_seed_to_hal)
+
+
+def test_compose_seed_to_hal_rejects_seed_keyed_map(tmp_path):
+    """A map still keyed by seed residues is the bug this replaced.
+
+    If the spec was not relabelled, the map says seed -> new and composing it
+    onto the parent's map finds nothing. That must raise rather than appear to
+    work.
+    """
+    from src.tracking import MotifTraceError, compose_seed_to_hal_rfd3
+
+    parent_seed_to_hal = {("A", 229): ("A", 142), ("A", 291): ("A", 179)}
+    meta = _wiggle_metadata(tmp_path, {"A229": "A71", "A291": "A129"})
+
+    with pytest.raises(MotifTraceError):
+        compose_seed_to_hal_rfd3(meta, parent_seed_to_hal)

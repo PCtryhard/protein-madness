@@ -314,53 +314,190 @@ def _configured_precision() -> str:
         return "?"
 
 
+def _probe_interpreter(py, modules):
+    """Can this interpreter import the modules its stage needs?
+
+    Job 21870491 burned an allocation because LigandMPNN was launched with an
+    interpreter that had no torch -- after RFD3 had already spent 135 s. The
+    path existing is not the question; what it can import is.
+    """
+    lines = [
+        "import importlib, sys",
+        "mods = " + repr(list(modules)),
+        "bad = []",
+        "for m in mods:",
+        "    try:",
+        "        importlib.import_module(m)",
+        "    except Exception as e:",
+        "        bad.append(m + ': ' + type(e).__name__)",
+        "print('MISSING ' + '; '.join(bad) if bad else 'ALL_OK py' + sys.version.split()[0])",
+    ]
+    code = "\n".join(lines)
+    try:
+        proc = subprocess.run([py, "-c", code], capture_output=True, text=True,
+                              timeout=300, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, "could not run: " + type(exc).__name__
+    # Look for the marker anywhere in stdout: deprecation warnings land on
+    # stderr and would otherwise be read as the verdict. ProDy 2.4.1 emits a
+    # pkg_resources warning that is harmless and is NOT a missing dependency.
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if line.startswith("ALL_OK"):
+            return True, line
+        if line.startswith("MISSING"):
+            return False, line
+    combined = (proc.stdout + proc.stderr).strip().splitlines()
+    return False, combined[-1] if combined else "(no output)"
+
+
 def check_tools(report: Report, pipeline) -> None:
-    """Are all three model stacks reachable from here?
+    """Are all the model stacks reachable AND usable from here?
 
     This is the check that decides which cluster can run the loop at all.
+    Every path below is checked for existence; every interpreter is also
+    checked for what it can import, because a path that exists and an
+    interpreter that works are different facts.
     """
     if pipeline is None:
         return
 
-    rfd = Path(os.path.expanduser(pipeline.rfdiffusion.run_inference))
-    if rfd.exists():
-        report.add("rfdiffusion", OK, str(rfd))
-    else:
+    # --- RFD3: what this pipeline actually uses --------------------------
+    rfd3 = getattr(pipeline, "rfd3", None)
+    if rfd3 is not None:
+        binary = Path(os.path.expanduser(rfd3.binary))
+        if binary.exists() and os.access(binary, os.X_OK):
+            report.add("rfd3 binary", OK, str(binary))
+        else:
+            report.add(
+                "rfd3 binary", FAIL,
+                "not found or not executable: " + str(binary),
+                "run cluster/euler/setup_rfd3.sh, or set rfd3.binary in "
+                "config/pipeline.yaml",
+            )
+        ckpt = Path(os.path.expanduser(rfd3.checkpoint))
+        if ckpt.exists():
+            size = ckpt.stat().st_size / 1e9
+            report.add("rfd3 checkpoint", OK, "%s (%.2f GB)" % (ckpt, size))
+        else:
+            report.add(
+                "rfd3 checkpoint", FAIL, "not found: " + str(ckpt),
+                "$SCRATCH is purged after ~2 weeks -- restage the weight with "
+                "cluster/euler/setup_rfd3.sh",
+            )
+
+    # --- legacy RFDiffusion, only if this config still uses it -----------
+    legacy = getattr(pipeline, "rfdiffusion", None)
+    if legacy is not None:
+        rfd = Path(os.path.expanduser(legacy.run_inference))
+        if rfd.exists():
+            report.add("rfdiffusion", OK, str(rfd))
+        else:
+            report.add(
+                "rfdiffusion", FAIL, "not found: " + str(rfd),
+                "set rfdiffusion.run_inference in config/pipeline.yaml to this "
+                "cluster's run_inference.py",
+            )
+    elif rfd3 is None:
         report.add(
-            "rfdiffusion", FAIL, f"not found: {rfd}",
-            "set rfdiffusion.run_inference in config/pipeline.yaml to this "
-            "cluster's run_inference.py",
+            "backbone generator", FAIL,
+            "neither rfd3 nor rfdiffusion is configured",
+            "one of the two must be set in config/pipeline.yaml",
         )
 
+    # --- LigandMPNN: script, checkpoint, AND its own interpreter ---------
     mpnn = Path(os.path.expanduser(pipeline.ligandmpnn.run_script))
     if mpnn.exists():
-        report.add("ligandmpnn", OK, str(mpnn))
+        report.add("ligandmpnn script", OK, str(mpnn))
     else:
         report.add(
-            "ligandmpnn", FAIL, f"not found: {mpnn}",
+            "ligandmpnn script", FAIL, "not found: " + str(mpnn),
             "set ligandmpnn.run_script in config/pipeline.yaml",
         )
 
-    boltz = shutil.which(pipeline.boltz.binary)
-    if boltz:
-        version = _probe_boltz(boltz)
-        report.add("boltz", OK, f"{boltz}{version}")
+    mpnn_ckpt = Path(os.path.expanduser(pipeline.ligandmpnn.checkpoint))
+    if mpnn_ckpt.exists():
+        report.add("ligandmpnn checkpoint", OK, str(mpnn_ckpt))
     else:
         report.add(
-            "boltz", FAIL, f"{pipeline.boltz.binary!r} is not on PATH",
+            "ligandmpnn checkpoint", FAIL, "not found: " + str(mpnn_ckpt),
+            "set ligandmpnn.checkpoint in config/pipeline.yaml",
+        )
+
+    mpnn_py = getattr(pipeline.ligandmpnn, "python", None)
+    if mpnn_py:
+        py = Path(os.path.expanduser(mpnn_py))
+        if not (py.exists() and os.access(py, os.X_OK)):
+            report.add(
+                "ligandmpnn python", FAIL,
+                "not found or not executable: " + str(py),
+                "run cluster/euler/setup_ligandmpnn.sh, or set "
+                "ligandmpnn.python in config/pipeline.yaml",
+            )
+        else:
+            ok, detail = _probe_interpreter(
+                str(py), ("torch", "numpy", "prody", "ml_collections")
+            )
+            if ok:
+                report.add("ligandmpnn python", OK, "%s (%s)" % (py, detail))
+            else:
+                report.add(
+                    "ligandmpnn python", FAIL, "%s: %s" % (py, detail),
+                    "this interpreter cannot import what LigandMPNN needs. "
+                    "Build it on Python 3.11 from LigandMPNN's own "
+                    "requirements.txt plus setuptools<81 "
+                    "(cluster/euler/setup_ligandmpnn.sh).",
+                )
+
+    # --- Boltz-2 ---------------------------------------------------------
+    configured = os.path.expanduser(pipeline.boltz.binary)
+    if Path(configured).exists() and os.access(configured, os.X_OK):
+        boltz = configured
+    else:
+        boltz = shutil.which(configured)
+    if boltz:
+        version = _probe_boltz(boltz)
+        report.add("boltz", OK, boltz + version)
+    else:
+        report.add(
+            "boltz", FAIL, repr(pipeline.boltz.binary) + " is not executable or on PATH",
             "pip install boltz in the environment the jobs use, or set "
             "boltz.binary to its absolute path",
         )
 
-    cache = Path(os.path.expanduser(pipeline.boltz.cache_dir))
-    if cache.exists() and any(cache.iterdir()):
-        report.add("boltz weights", OK, f"{cache} is populated", required=False)
+    # The staged assets are what matter: prepare_cache() symlinks them into
+    # cache_dir, so cache_dir being absent is normal while assets_dir being
+    # absent is fatal on a node with no outbound internet.
+    assets = Path(os.path.expanduser(pipeline.boltz.assets_dir))
+    wanted = ("boltz2_conf.ckpt", "boltz2_aff.ckpt", "mols")
+    if assets.exists():
+        missing = [w for w in wanted if not (assets / w).exists()]
+        if missing:
+            report.add(
+                "boltz assets", FAIL,
+                "%s is missing %s" % (assets, ", ".join(missing)),
+                "COMPUTE NODES HAVE NO OUTBOUND INTERNET. Restage with "
+                "cluster/euler/setup_boltz.sh before submitting.",
+            )
+        else:
+            report.add("boltz assets", OK,
+                       "%s has all %d" % (assets, len(wanted)))
     else:
         report.add(
-            "boltz weights", WARN, f"{cache} is missing or empty",
-            "Boltz downloads weights on first use. On Euler COMPUTE NODES HAVE "
-            "NO OUTBOUND INTERNET, so do one prediction on the login node first "
-            "to populate the cache, or the first job will hang or fail.",
+            "boltz assets", FAIL, "not found: " + str(assets),
+            "COMPUTE NODES HAVE NO OUTBOUND INTERNET. Restage with "
+            "cluster/euler/setup_boltz.sh before submitting.",
+        )
+
+    cache = Path(os.path.expanduser(pipeline.boltz.cache_dir))
+    if cache.exists() and any(cache.iterdir()):
+        report.add("boltz cache", OK, str(cache) + " is populated",
+                   required=False)
+    else:
+        report.add(
+            "boltz cache", OK,
+            "%s not yet created -- prepare_cache() builds it from %s"
+            % (cache, assets),
             required=False,
         )
 
@@ -368,7 +505,8 @@ def check_tools(report: Report, pipeline) -> None:
 def _probe_boltz(binary: str) -> str:
     try:
         proc = subprocess.run(
-            [binary, "--help"], capture_output=True, text=True, timeout=120, check=False
+            [binary, "predict", "--help"], capture_output=True, text=True,
+            timeout=120, check=False
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return f"  (could not run --help: {type(exc).__name__})"
