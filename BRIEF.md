@@ -103,8 +103,31 @@ guide:
   failing**. Never submit there. The example sbatch asks for
   `--constraint=g6.2xlarge`; that one line costs us half our compute.
 - GPU nodes are dynamic (`idle~`, powered down). The first job of the day pays a
-  several-minute spin-up. Keep the queue warm; don't let both nodes idle down
-  between generations.
+  several-minute spin-up — the job sits in `CONFIGURING` while the instance
+  physically boots. Keep the queue warm; don't let both nodes idle down between
+  generations.
+
+**The actual node names, confirmed on the cluster** (`sinfo -N`):
+
+| Node | Feature | What it is | Use |
+|---|---|---|---|
+| `gpu-dy-l4small-1` | `g6.xlarge` | 4 CPU, 16 GB, 1×L4 | **our pair — run two of these** |
+| `gpu-dy-l4small-2` | `g6.xlarge` | 4 CPU, 16 GB, 1×L4 | **our pair** |
+| `gpu-dy-l4-1` | `g6.2xlarge` | 8 CPU, 32 GB, 1×L4 | MSA building only; consumes the whole allocation |
+| `gpu-dy-l4big-1` | `g6.4xlarge` | 16 CPU, 64 GB | **never** — above allocation, queues forever |
+
+So the evolution loop's sbatch header is:
+
+```bash
+#SBATCH --constraint=g6.xlarge     # NOT g6.2xlarge, which halves our GPUs
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=14G
+#SBATCH --gres=gpu:l4:1
+```
+
+The organisers' example uses `--constraint=g6.2xlarge --cpus-per-task=8`, which
+takes the entire allocation for one GPU. That is correct for their one-shot
+verification job and wrong for ours.
 
 **Therefore: ~2 GPUs × ~30 usable hours ≈ 60 GPU-hours, total, for everything.**
 Boltz-2 is the expensive step and the only step that produces score. The entire
