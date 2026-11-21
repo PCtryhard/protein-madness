@@ -640,36 +640,99 @@ This is the old `README.md` "three-way smoke test" promise, except now it has
 teeth and a deadline. It is **Gate 3b**, and it blocks pooling, not folding —
 Euler can start producing triage folds before it passes.
 
-### 8.3 What we need to find out about Euler, fast
+### 8.3 What Euler actually is — surveyed, not guessed
 
-Our own `TODO.md` is honest that this path has never been exercised. Open items,
-in the order they block things:
+Logged in as `malexandrov@euler.ethz.ch` (key auth works). Hard facts:
 
-- **Which shareholder account?** Euler GPU nodes are `-A/--account=<share>` only
-  and we do not know ours (`TODO.md` B6). Without it, submission fails outright.
-  Ask whoever on the team has used Euler GPUs before.
-- **Which GPUs can we actually get?** `sinfo` it. Boltz-2 on a 260-residue
-  complex plus ligand wants roughly 24 GB. The 11 GB RTX 2080Ti's in
-  `DECISIONS.md` almost certainly will not do it; 3090/4090/A100 nodes will.
-  **If we can only reach 11 GB cards, Euler cannot fold and this whole section
-  collapses back to CPU-side work** — find this out first, it is one command.
-- **Boltz-2 install + weights staged on the login node**, not in a job: compute
-  nodes have no outbound internet (`MANIFEST.md`), and a client that retries
-  until walltime looks exactly like a hang.
-- `--gres=gpumem` suffix is unverified (`TODO.md` B4); a GRES parse error is the
-  symptom. One real submission settles it.
-- **`$SCRATCH` is purged after ~2 weeks and is not backed up.** Fine for a
-  weekend, but results come home to `/mnt/work` or git, not Euler scratch.
+**Share: `es_workshop`** — 80 CPU cores, 1024 GiB RAM, **32 GPUs**. Associations
+exist for `gpu`, `gpuhe`, `gpupr`, `hpc` and `bigmem`.
+
+**There is a dedicated hackathon reservation**, and it is sitting empty:
+
+```
+ReservationName=ws_49734_gpu     PartitionName=gpu.120h   Flags=FLEX,MAGNETIC
+Nodes=eu-lo-g2-[023,026,034],eu-lo-g3-043        NodeCnt=4  CoreCnt=328
+StartTime=2026-11-21T08:00  EndTime=2026-11-22T20:00       State=ACTIVE
+Groups=urbanb-group,bsse-wicky-euler-hackathon
+```
+
+All four nodes were **`IDLE+RESERVED` with zero CPUs allocated** when surveyed —
+nobody is using them. The reservation runs to Sunday 20:00, i.e. past our pitch.
+`MAGNETIC` means eligible jobs land there without asking.
+
+**And here is the catch.** Every one of those nodes is:
+
+```
+Gres=gpu:nvidia_geforce_rtx_2080_ti:8(S:0-1),gpumem:no_consume:11G
+```
+
+4 nodes × 8 GPUs = the 32 GPUs in the share, and **all of them are 11 GB RTX
+2080Ti, sm_75, no bf16.** Exactly the hardware `DECISIONS.md` warned about.
+
+So the trade is stark and worth stating precisely:
+
+| | AWS | Euler reservation |
+|---|---|---|
+| GPUs | **2** | **32** |
+| VRAM each | 24 GB | **11 GB** |
+| Availability | ours, now | idle, reserved to Sun 20:00 |
+| Boltz-2 at 260 res | known to work | **unknown — this is the question** |
+
+**If Boltz-2 fits in 11 GB at 260 residues, Euler is sixteen times our AWS
+capacity and becomes the primary folding pool, with AWS demoted to generation
+and confirmation runs.** That single fact would reshape the whole weekend. If it
+does not fit, Euler's reservation is useless to us for folding and we fall back
+to §8.1 as written, or queue for bigger cards outside the reservation.
+
+The risk is specific and not just about size: **sm_75 has no bf16.** If Boltz-2's
+trunk wants bf16 it will fall back to fp32, which roughly doubles activation
+memory and would likely blow 11 GB even if the model itself fits. `fp16` plus
+reduced `--sampling_steps` may rescue it. This is unknowable from documentation
+and must be measured.
+
+**So the first Euler action is a VRAM probe, not an install project:** a
+synthetic 260-residue sequence plus 6NT, folded once on one 2080Ti, watching
+peak memory. It is biologically meaningless and that is fine — it measures
+memory and wall-clock, which is all we need. It can run *now*, while the AWS
+verification job still holds that cluster.
+
+Other facts settled while surveying:
+
+- **`TODO.md` B6 is resolved**: the account is `es_workshop`.
+- **`TODO.md` B4 is resolved**: the GRES suffix is an upper/lower-case `G` —
+  the nodes advertise `gpumem:no_consume:11G`, so `--gres=gpumem:11g` parses.
+  To reach bigger cards *outside* the reservation, raise that number.
+- **The login node reaches PyPI** (HTTP 200), so `pip install boltz` and weight
+  staging work there. Compute nodes still have no outbound internet — stage
+  weights on the login node, never inside a job, or a retrying client will look
+  exactly like a hang until walltime kills it.
+- `cuda/13.0.2` and `eth_proxy` modules are present.
+- **`$SCRATCH` is purged after ~2 weeks and is not backed up** (482 T, 73 %
+  full). Fine for a weekend; results come home to git or `/mnt/work`, never left
+  on Euler scratch.
+
+### 8.4 If 11 GB is not enough
+
+Two fallbacks, in order:
+
+1. **Request bigger cards outside the reservation.** `es_workshop` has `gpu`,
+   `gpuhe` and `gpupr` associations, and Euler as a whole has RTX 4090 and 3090
+   (24 GB), A100 40/80 GB, and RTX PRO 6000 (96 GB) nodes. Ask with
+   `--gres=gpumem:24g`. Cost: we leave the reservation and join the general
+   queue, so throughput becomes unpredictable — acceptable for overnight batches,
+   not for the interactive loop.
+2. **Euler does CPU-side work only** — Gates A and B, the scorer, the mutation
+   operator, analysis — and all folding stays on AWS. §8.1 as originally written.
 
 `src/backends/euler.py` already knows sbatch, arrays and throttling — keep it,
 strip the model-specific assumptions, and run it behind the same site interface
 as the AWS backend.
 
-### 8.4 Site profiles
+### 8.5 Site profiles
 
 ```
 configs/site/pdh-aws.yaml     partition gpu, constraint g6.xlarge, gres gpu:l4:1, /mnt/ref roots
-configs/site/euler.yaml       partition, account, gres + gpumem, module loads, $SCRATCH weights
+configs/site/euler.yaml       partition gpu.120h, account es_workshop, gres gpu:1 + gpumem:11g, $SCRATCH weights
 ```
 
 Code reads the site file; `PDH_SITE` (or `--site`) picks it. Nothing hardcodes
@@ -767,12 +830,16 @@ the evolution loop is optimising the wrong thing. Blocks everything downstream.
 **GATE 3 — MSA decision made and written down.** Doubles or halves throughput.
 Decide by early afternoon, not by evening.
 
-**GATE 3b — Euler: can it fold, and do its numbers match?** Two separate
-questions, in order. (i) Do we have a shareholder account and ≥24 GB cards? One
-`sinfo` and one submission answer it — **if not, Euler is CPU-side only and we
-stop spending time on it.** (ii) Does the same sequence at the same seed give
-the same metrics on both clusters (§8.2)? Until (ii) passes, Euler folds may be
-used for triage but must not be pooled into the leaderboard.
+**GATE 3b — Euler: does Boltz-2 fit in 11 GB?** The account (`es_workshop`) and
+the reservation (32 idle 2080Ti's until Sunday 20:00) are confirmed; the only
+open question is VRAM. A synthetic 260-residue sequence plus 6NT, one fold, peak
+memory watched. **This gate is worth more than any other on the list: passing it
+multiplies our folding capacity by sixteen.** Failing it costs an hour and we
+fall back to §8.4.
+
+**GATE 3c — do both clusters agree?** Same sequence, same seed, same flags, both
+clusters (§8.2). Until this passes, Euler folds may be used for triage but must
+not be pooled into the leaderboard.
 
 **GATE 4 — generation 0 scored on one backbone.** The loop is real. Only now do
 we set population size and generation count from the Gate 1 measurement.
