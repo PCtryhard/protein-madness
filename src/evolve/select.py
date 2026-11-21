@@ -118,6 +118,12 @@ class HardGates:
     #: Severe clashes mean a strained pose the model will relieve by ejecting
     #: the ligand - the exact failure we are trying to fix.
     max_clash_pairs: int = 8
+    #: Eligibility: TM-score above this to a published structure disqualifies.
+    #: A hard gate, not a ranking term - no amount of good geometry rescues a
+    #: design that scores zero. Measured: 2 of our first 8 backbones failed it
+    #: at 0.703 and 0.705, and they were the two with the BEST burial, so this
+    #: actively opposes the burial term and must be enforced, not traded off.
+    max_tm_score: float = 0.70
 
 
 def passes_gates(aggregate: dict, sequence: str, gates: HardGates = HardGates()) -> tuple[bool, list[str]]:
@@ -133,6 +139,17 @@ def passes_gates(aggregate: dict, sequence: str, gates: HardGates = HardGates())
     burial = aggregate.get("base_burial_ca_count_mean", math.nan)
     if math.isfinite(burial) and burial < gates.min_burial:
         reasons.append(f"burial {burial:.0f} < {gates.min_burial}")
+
+    # Eligibility. A MEASURED violation kills the design here and now; an
+    # unmeasured TM-score is not treated as a pass - it is recorded so the
+    # submission builder can refuse it later. "We did not check" and "it is
+    # fine" must never look the same.
+    tm = aggregate.get("tm_score", math.nan)
+    if math.isfinite(tm) and tm > gates.max_tm_score:
+        reasons.append(
+            f"TM-score {tm:.3f} > {gates.max_tm_score} to "
+            f"{aggregate.get('tm_closest', 'a published structure')}: ineligible"
+        )
     return (not reasons), reasons
 
 

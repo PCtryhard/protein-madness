@@ -183,11 +183,122 @@ def max_tm_score(
         return best
 
 
-def pairwise_tm(a: Path, b: Path, tmalign: str = DEFAULT_TMALIGN) -> float:
-    """TM-score between two structures, normalised by the second.
+#: RCSB full-text queries that define the targeted reference set. These are the
+#: structures our scaffolds are most likely to resemble, because the motif we
+#: build around was lifted from one of them.
+KEMP_SEARCH_TERMS = (
+    "Kemp eliminase",
+    "Kemp elimination",
+    "benzisoxazole",
+    "computational enzyme design",
+)
+RCSB_SEARCH_URL = "https://search.rcsb.org/rcsbsearch/v2/query"
+RCSB_DOWNLOAD_URL = "https://files.rcsb.org/download/{pdb_id}.pdb"
 
-    For spot checks - "how close is this design to HG3.17?" - not for the
-    eligibility rule, which needs the database search above.
+
+def rcsb_search(term: str, limit: int = 40, timeout: int = 60) -> list[str]:
+    """PDB ids matching a full-text query.
+
+    The reference set is built by search rather than from a hardcoded list, so
+    it is reproducible and auditable: anyone can re-run the query and see the
+    same entries, and nothing depends on an id someone remembered.
+    """
+    import json as _json
+    import urllib.request
+
+    query = {
+        "query": {"type": "terminal", "service": "full_text",
+                  "parameters": {"value": term}},
+        "return_type": "entry",
+        "request_options": {"paginate": {"start": 0, "rows": limit}},
+    }
+    request = urllib.request.Request(
+        RCSB_SEARCH_URL, data=_json.dumps(query).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as handle:
+        raw = handle.read()
+    if not raw.strip():
+        return []            # RCSB answers 204 No Content when nothing matches
+    return [hit["identifier"] for hit in _json.loads(raw).get("result_set", [])]
+
+
+def fetch_structure(pdb_id: str, out_dir: Path, timeout: int = 60) -> Path | None:
+    """Download one PDB entry. Returns None if it could not be fetched."""
+    import urllib.request
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{pdb_id}.pdb"
+    if path.is_file() and path.stat().st_size > 1000:
+        return path
+    try:
+        with urllib.request.urlopen(
+            RCSB_DOWNLOAD_URL.format(pdb_id=pdb_id), timeout=timeout
+        ) as handle:
+            path.write_bytes(handle.read())
+    except Exception as exc:                     # noqa: BLE001 - report, never guess
+        log.warning("could not fetch %s: %s", pdb_id, exc)
+        return None
+    return path
+
+
+def build_reference_set(
+    out_dir: Path, terms: tuple[str, ...] = KEMP_SEARCH_TERMS, limit: int = 40
+) -> list[Path]:
+    """Download the targeted set of published structures to compare against.
+
+    Needs outbound internet, so run it on a login/head node - never inside a
+    compute job, where a retrying download looks exactly like a hang.
+    """
+    ids: list[str] = []
+    for term in terms:
+        try:
+            found = rcsb_search(term, limit=limit)
+        except Exception as exc:                 # noqa: BLE001
+            log.warning("RCSB search failed for %r: %s", term, exc)
+            continue
+        log.info("RCSB %r: %d hits", term, len(found))
+        ids.extend(found)
+    paths = [p for p in (fetch_structure(i, out_dir) for i in sorted(set(ids))) if p]
+    log.info("reference set: %d structures in %s", len(paths), out_dir)
+    return paths
+
+
+def max_tm_vs_set(
+    structure: Path, targets: list[Path], tmalign: str = DEFAULT_TMALIGN
+) -> tuple[float, str]:
+    """(highest TM-score, which structure produced it) over a reference set.
+
+    **This is a lower bound on the real rule**, which is about *any* published
+    structure. A targeted set of a hundred-odd entries can only ever say "at
+    least this similar". Treat a pass here as "not obviously disqualified",
+    never as "cleared" - see :func:`max_tm_score` for the full Foldseek search.
+    """
+    if not targets:
+        raise ToolUnavailable(
+            "empty reference set; run build_reference_set() on a node with internet"
+        )
+    best, best_id = 0.0, ""
+    for target in targets:
+        try:
+            score = pairwise_tm(structure, target, tmalign)
+        except RuntimeError as exc:
+            log.warning("TMalign failed on %s vs %s: %s", structure.name, target.name, exc)
+            continue
+        if score > best:
+            best, best_id = score, target.stem
+    return best, best_id
+
+
+def pairwise_tm(a: Path, b: Path, tmalign: str = DEFAULT_TMALIGN) -> float:
+    """TM-score between two structures, **normalised by the first** (our design).
+
+    TMalign prints two numbers, one per chain length. Which one you take is not
+    a detail: normalising by the reference instead would let a design hide
+    behind a much larger published structure. The question we are asked is "how
+    much of *our* design looks like something published", so the query length is
+    the right denominator.
     """
     _require(tmalign, "TMalign")
     result = subprocess.run([tmalign, str(a), str(b)], capture_output=True, text=True)
@@ -196,7 +307,7 @@ def pairwise_tm(a: Path, b: Path, tmalign: str = DEFAULT_TMALIGN) -> float:
     scores = [
         float(line.split("=")[1].split()[0])
         for line in result.stdout.splitlines()
-        if line.startswith("TM-score=")
+        if line.startswith("TM-score=") and "Chain_1" in line
     ]
     if not scores:
         raise RuntimeError(f"TMalign produced no TM-score:\n{result.stdout[-1000:]}")
