@@ -463,4 +463,4 @@ def test_the_first_run_profile_matches_the_requested_shape():
     assert cfg.ligandmpnn.sequences_per_backbone == 3
     assert cfg.search.wiggle.designs_per_parent == 2
     assert cfg.search.mutate.max_mutants_per_parent == 2
-    assert cfg.run.max_cycles == 3
+    assert cfg.run.max_cycles == 1

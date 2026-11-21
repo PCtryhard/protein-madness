@@ -10,10 +10,15 @@
 # Every design is one Boltz-2 call, and the two cards run two designs at once.
 #
 #   cycle 0    5 backbones x 3 sequences                        = 15 designs
-#   cycle 1-3  wiggle:  2 parents x 2 backbones x 3 sequences   = 12
+#   cycle 1    wiggle:  2 parents x 2 backbones x 3 sequences   = 12
 #              mutate:  2 parents x 2 mutants                   =  4
-#                                                                 16 per cycle
-#   total                                              15 + 3x16 = 63 designs
+#                                                                 16
+#   total                                                         31 designs
+#
+# One cycle, on purpose: it is the smallest run that exercises every stage --
+# RFdiffusion, LigandMPNN, Boltz-2, scoring, AND both expansion branches --
+# so if it finishes clean the pipeline works end to end. Raise max_cycles to
+# 3-12 for a run meant to actually optimise something.
 #
 # Timing inputs, both from this repo rather than invented: RUNLOG.md section 5
 # measured RFD3 at ~45 s per backbone, and PIPELINE.md plans for a few minutes
@@ -23,9 +28,9 @@
 #
 #   cycle 0    ~4 min RFdiffusion + ~1 min LigandMPNN + 15 folds / 2 cards
 #              = 13-28 min
-#   each cycle ~3 min RFdiffusion + ~1 min LigandMPNN + 16 folds / 2 cards
+#   cycle 1    ~3 min RFdiffusion + ~1 min LigandMPNN + 16 folds / 2 cards
 #              = 12-28 min
-#   3 cycles   = 40-90 min
+#   total      = 25-55 min
 #
 # Treat that as an order of magnitude, not a promise. Nothing in this pipeline
 # has ever been timed on a real GPU; the first run is what replaces these
@@ -49,7 +54,7 @@ run:
   name: null
   seed: 0
   gpus: [0, 1]
-  max_cycles: 3                # bounded on purpose for a first run
+  max_cycles: 1                # one cycle: enough to exercise both branches
   patience: 2                  # see the note on eval_replicates below
   min_delta: 0.005
   # Kept at 1 deliberately. scripts/noise_control.py --from-csv says the angle
