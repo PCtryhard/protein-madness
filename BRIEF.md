@@ -181,11 +181,14 @@ verification job and wrong for ours.
 Boltz-2 is the expensive step and the only step that produces score. The entire
 design of the evolution loop below is shaped by that number.
 
-**Plus Euler**, which the organisers have cleared us to use (§8). That is
-potentially a large multiplier on the folding stage specifically — but it is
-unmeasured, unverified and account-gated, so **no plan depends on it until a
-Boltz-2 job has actually run there.** Treat AWS as the budget and Euler as
-upside: if it lands, generations multiply; if it does not, nothing in §4 breaks.
+**Plus Euler: 32 more GPUs, measured and working** (§8). A fold there takes 34 s
+and uses 3.3 GB of an 11 GB card. Between the two clusters we have **34 GPUs**
+and something like one completed fold per second in aggregate.
+
+**Compute has therefore stopped being the constraint on anything.** The binding
+constraint for the rest of the weekend is how fast we can build the pipeline
+that feeds it, and how well we choose what to generate. Every hour both clusters
+sit idle is the real cost now.
 
 ### The MSA question — worth 2× our throughput
 
@@ -738,41 +741,40 @@ All four nodes were **`IDLE+RESERVED` with zero CPUs allocated** when surveyed �
 nobody is using them. The reservation runs to Sunday 20:00, i.e. past our pitch.
 `MAGNETIC` means eligible jobs land there without asking.
 
-**And here is the catch.** Every one of those nodes is:
+Every one of those nodes is:
 
 ```
 Gres=gpu:nvidia_geforce_rtx_2080_ti:8(S:0-1),gpumem:no_consume:11G
 ```
 
-4 nodes × 8 GPUs = the 32 GPUs in the share, and **all of them are 11 GB RTX
-2080Ti, sm_75, no bf16.** Exactly the hardware `DECISIONS.md` warned about.
+4 nodes × 8 GPUs = the 32 GPUs in the share, **all of them 11 GB RTX 2080Ti,
+sm_75** — exactly the hardware `DECISIONS.md` warned about. So we probed it
+rather than argued about it.
 
-So the trade is stark and worth stating precisely:
+**MEASURED (job 21802893): Boltz-2 fits, easily.**
 
 | | AWS | Euler reservation |
 |---|---|---|
-| GPUs | **2** | **32** |
-| VRAM each | 24 GB | **11 GB** |
-| Availability | ours, now | idle, reserved to Sun 20:00 |
-| Boltz-2 at 260 res | known to work | **unknown — this is the question** |
+| GPUs | 2 | **32** |
+| VRAM each | 24 GB | 11 GB |
+| Peak VRAM used, 260 res + 6NT | — | **3354 MiB of 11264** |
+| Seconds per fold | 21 | **34** |
+| Availability | ours | reserved to Sun 20:00 |
 
-**If Boltz-2 fits in 11 GB at 260 residues, Euler is sixteen times our AWS
-capacity and becomes the primary folding pool, with AWS demoted to generation
-and confirmation runs.** That single fact would reshape the whole weekend. If it
-does not fit, Euler's reservation is useless to us for folding and we fall back
-to §8.1 as written, or queue for bigger cards outside the reservation.
+A 260-residue complex uses **under a third of a 2080Ti**. The feared bf16
+problem did not materialise: `torch.cuda.is_bf16_supported()` returned **True**
+on sm_75, and the run completed with exit code 0 at only 1.6× the L4's time.
+Recorded plainly because this brief predicted the opposite.
 
-The risk is specific and not just about size: **sm_75 has no bf16.** If Boltz-2's
-trunk wants bf16 it will fall back to fp32, which roughly doubles activation
-memory and would likely blow 11 GB even if the model itself fits. `fp16` plus
-reduced `--sampling_steps` may rescue it. This is unknowable from documentation
-and must be measured.
+So **all 32 GPUs are usable**, giving roughly one completed fold per second
+across the reservation. Two follow-ups worth a few minutes each: whether two or
+three Boltz processes can share one card (3.3 GB fits three times into 11 GB),
+and the §8.2 cross-cluster agreement check before pooling Euler and AWS numbers
+in one leaderboard.
 
-**So the first Euler action is a VRAM probe, not an install project:** a
-synthetic 260-residue sequence plus 6NT, folded once on one 2080Ti, watching
-peak memory. It is biologically meaningless and that is fine — it measures
-memory and wall-clock, which is all we need. It can run *now*, while the AWS
-verification job still holds that cluster.
+Setup that now exists on Euler, ready to use:
+`$SCRATCH/pdh/venv` (Boltz **2.2.1**, pinned to match AWS; torch 2.15.0+cu132),
+`$SCRATCH/pdh/cache` (7.6 GB of weights, staged from the login node).
 
 Other facts settled while surveying:
 
@@ -902,21 +904,34 @@ the plan, not that we debug past it.
 §4.1 is rewritten around this. The run also handed us the baseline to beat and
 the geometry-collapse finding in §1.
 
-**GATE 2 — `src/score/official.py` reproduces the example's own summary.**
-If our metric does not match theirs on their own run, our ranking is fiction and
-the evolution loop is optimising the wrong thing. Blocks everything downstream.
+**GATE 2 — PASSED.** `src/score/official.py` reproduces the organisers'
+verification run exactly — iPDE 2.5525107383728027, base contact
+11.178812026977539 Å, donor contact 7.478554725646973 Å, min ligand distance
+2.063716411590576 Å, 2 clashes: every value identical to their `summary.json`.
+Their real 260-residue output is committed as the test fixture, and every
+expected value is read from their file rather than typed in, so the test asserts
+agreement with *them* and cannot drift into agreeing with ourselves. 91 tests
+pass. **We now measure with the judges' ruler.**
+
+Burial, which their summary does not expose, comes out at **30 CA atoms within
+12 Å** for the reference design. That is the metric-3 baseline to beat.
 
 **GATE 3 — PASSED.** The MSA question is settled empirically: the de novo design
 got `depth: 1, nonquery_rows: 0` while the natural control got 301. **Drop
 MMseqs2 from the design loop**, keep it for the eligibility check (§7).
 
-**GATE 3b — Euler: does Boltz-2 fit in 11 GB?** *Demoted.* With folds at 21 s,
-AWS alone affords thousands of them, so Euler is no longer the difference
-between a plan and no plan — it is spare capacity. Finish the probe because it
-is nearly done and cheap, but **do not spend more team-hours on Euler than the
-probe itself.** One warning sign already: the AWS log shows Boltz-2 running
-`bfloat16 Automatic Mixed Precision`, and the 2080Ti's sm_75 has no bf16. The
-probe will say whether it falls back gracefully or not.
+**GATE 3b — PASSED, and not marginally.** Boltz-2 folded a 260-residue complex
+with 6NT on an 11 GB RTX 2080Ti using a **peak of 3354 MiB — under a third of
+the card** — in **34 s** (vs 21 s on the L4). `torch.cuda.is_bf16_supported()`
+returned **True** on sm_75, so the bf16 worry in this brief's earlier draft was
+wrong; recorded here because a wrong prediction we acted on is worth as much as
+a right one.
+
+Consequence: **all 32 reserved GPUs are usable.** Total capacity is now absurd
+relative to need — roughly one fold per second in aggregate across the
+reservation. Worth testing, since 3.3 GB fits three times into 11 GB: whether
+two or three Boltz processes can share one card. Even without that, compute has
+stopped being a constraint on anything.
 
 **GATE 3c — do both clusters agree?** Same sequence, same seed, same flags, both
 clusters (§8.2). Until this passes, Euler folds may be used for triage but must
@@ -1017,8 +1032,8 @@ Point 7 is not modesty, it is what makes 1–6 credible. Every number comes out 
 | Our calibration controls come out in the wrong order | say so. A team that discovered its metric is noisy and reported it honestly beats a team that ranked on a number it never questioned. |
 | Someone argues for an exception to the Sunday freeze | the answer is in this file and it is no. |
 | Euler and AWS disagree on the same sequence | do not pool. Euler does triage only; every score that decides a parent comes from one cluster. §8.2. |
-| Euler turns out to be 11 GB cards only | it cannot fold Boltz-2 at 260 residues. Drop it to CPU-side work immediately rather than fighting it — this is Gate 3b(i) and it is one command. |
-| We spend half a day standing Euler up and get nothing | the §8.3 list is ordered so the cheapest disqualifying question comes first. Timebox it: if Boltz has not folded on Euler by Saturday evening, it is not part of this weekend. |
+| ~~Euler turns out to be 11 GB cards only~~ | **Resolved: it folds in 3.3 GB.** All 32 GPUs usable. |
+| Compute sits idle because nothing is built to feed it | **this is now the real risk.** 34 GPUs are available and the pipeline to use them does not exist yet. The scarce resource is build time, not GPU time. |
 | A metric looks suspiciously good | assume a residue-numbering bug first. Three numbering systems are in play. |
 
 ---
