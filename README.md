@@ -23,7 +23,21 @@ python cluster/preflight.py                                       # can this box
 python scripts/noise_control.py --from-csv                        # is the score signal?
 ```
 
-To run it on a cluster, start at **[cluster/README.md](cluster/README.md)**. When
+To run it on a cluster, start at **[cluster/README.md](cluster/README.md)**.
+
+**On Euler**, a teammate reproduces the whole setup under their own account
+with three scripts — the tools pin incompatible stacks, so each gets its own
+environment, which is what upstream tells you to do:
+
+```bash
+bash cluster/euler/setup_rfd3.sh         # torch 2.7.1 + numpy 2, RFD3
+bash cluster/euler/setup_ligandmpnn.sh   # torch 2.2.1 + numpy 1.23, python 3.11
+bash cluster/euler/setup_boltz.sh        # boltz 2.2.1
+python cluster/preflight.py              # checks every path before you queue
+```
+
+`config/pipeline.yaml` refers to them as `${HOME}/pm-*-env` and
+`${SCRATCH}/pdh/...`, so there is nothing personal in it. When
 the refolded motif files arrive, **[HANDOFF.md](HANDOFF.md)** is the whole
 procedure.
 
@@ -97,7 +111,7 @@ In detail:
 | `scripts/compare_no_mutation.py` | kept from the old pipeline, still runs against `data/No_mutation_run/` |
 | `scripts/noise_control.py --from-csv` | real, run; the verdict above is its output |
 | `scripts/noise_control.py` GPU mode | **refuses** — needs provenance maps read back from `designs.db`, not written |
-| `config/pipeline.small.yaml` | loads, cross-validates against all 7 targets, key-parity tested |
+| `config/pipeline.yaml` | loads, cross-validates against all 7 targets, key-parity tested |
 | seed-only runs (`max_cycles: 0`) | logic tested; never run with models |
 | `protonation.engine: reduce` | **refuses** — see `src/stages/protonate.py` for why |
 | `src/cli.py resume` | **refuses** — the patience counter is not rebuilt from the database |
@@ -163,7 +177,7 @@ scores cycle 0, writes a leaderboard, expands nothing. About an hour per
 variant:
 
 ```powershell
-python -m src.cli run --pipeline config/pipeline.small.yaml --target config/targets/01_his_asp.yaml --name small-01
+python -m src.cli run --target config/targets/01_his_asp.yaml --name small-01
 ```
 
 **A full search.** Needs both GPUs and all three model stacks, and is hours per

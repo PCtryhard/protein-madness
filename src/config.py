@@ -11,11 +11,33 @@ debugging the wrong thing.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Annotated, Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    Field,
+    field_validator,
+    model_validator,
+)
+
+def _expand(value: str | None) -> str | None:
+    """Expand ~ and $VARS in a path.
+
+    So a committed cluster config can say ${SCRATCH}/pdh/weights/... and work
+    for every teammate under their own account, instead of hardcoding one
+    person's home directory. Applied to every path-valued field below.
+    """
+    if value is None:
+        return None
+    return os.path.expanduser(os.path.expandvars(value))
+
+
+ExpandedPath = Annotated[str, BeforeValidator(_expand)]
+OptionalExpandedPath = Annotated[str | None, BeforeValidator(_expand)]
 
 Fraction = Annotated[float, Field(ge=0.0, le=1.0)]
 Positive = Annotated[float, Field(gt=0.0)]
@@ -66,8 +88,8 @@ class RunCfg(Strict):
 
 
 class RFdiffusionCfg(Strict):
-    run_inference: str
-    ckpt: str = "Base_ckpt.pt"
+    run_inference: ExpandedPath
+    ckpt: ExpandedPath = "Base_ckpt.pt"
     partial_T: Annotated[int, Field(ge=1)] = 10
     diffuser_T: Annotated[int, Field(ge=1)] = 50
     designs_per_parent: Annotated[int, Field(ge=1)] = 4
@@ -94,8 +116,8 @@ class RFD3Cfg(Strict):
     other one.
     """
 
-    binary: str = "rfd3"
-    checkpoint: str
+    binary: ExpandedPath = "rfd3"
+    checkpoint: ExpandedPath
     n_batches: Annotated[int, Field(ge=1)] = 5
     diffusion_batch_size: Annotated[int, Field(ge=1)] = 1
     partial_T: Annotated[int, Field(ge=1)] = 10
@@ -103,8 +125,14 @@ class RFD3Cfg(Strict):
 
 
 class LigandMPNNCfg(Strict):
-    run_script: str
-    checkpoint: str = "ligandmpnn_v_32_010_25.pt"
+    run_script: ExpandedPath
+    # Which interpreter runs run.py. null means "the one running this
+    # pipeline", which is almost always right: that environment was chosen
+    # because it has torch. A bare "python" resolves to whatever the module
+    # system put on PATH, which on Euler has no torch at all -- that failure
+    # cost a GPU allocation.
+    python: OptionalExpandedPath = None
+    checkpoint: ExpandedPath = "ligandmpnn_v_32_010_25.pt"
     temperature: Annotated[float, Field(gt=0.0)] = 0.1
     sequences_per_backbone: Annotated[int, Field(ge=1)] = 4
     omit_AA: str = "CX"
@@ -117,8 +145,8 @@ class LigandMPNNCfg(Strict):
 
 
 class BoltzCfg(Strict):
-    binary: str = "boltz"
-    cache_dir: str = "~/.boltz"
+    binary: ExpandedPath = "boltz"
+    cache_dir: ExpandedPath = "~/.boltz"
     recycling_steps: Annotated[int, Field(ge=1)] = 3
     diffusion_samples: Annotated[int, Field(ge=1)] = 1
     sampling_steps: Annotated[int, Field(ge=1)] = 200
@@ -132,7 +160,7 @@ class BoltzCfg(Strict):
     # run's own cache dir rather than copying 6 GB per run, and rather than
     # letting Boltz try to download them -- which fails on a compute node with
     # no outbound internet.
-    assets_dir: str | None = None
+    assets_dir: OptionalExpandedPath = None
 
     @field_validator("precision")
     @classmethod

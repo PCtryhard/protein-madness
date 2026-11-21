@@ -350,7 +350,23 @@ def read_structure(path: str | Path, ligand_resname: str | None = None) -> Struc
         return read_cif(path, ligand_resname)
     if suffix in (".pdb", ".ent"):
         return read_pdb(path, ligand_resname)
-    raise TrackingError(f"unsupported structure format: {path}")
+
+    # Unrecognised suffix: sniff the content. Real inputs arrive with names
+    # like 01_his_asp_.pdb.pre-boltz, and renaming a colleague's file to
+    # satisfy a glob is the wrong fix.
+    try:
+        head = path.read_text(encoding="utf-8", errors="replace")[:4096]
+    except OSError as exc:
+        raise TrackingError(f"cannot read {path}: {exc}") from exc
+    if any(line.startswith(("ATOM", "HETATM", "HEADER", "REMARK", "HELIX"))
+           for line in head.splitlines()):
+        return read_pdb(path, ligand_resname)
+    if "_atom_site." in head or head.lstrip().startswith("data_"):
+        return read_cif(path, ligand_resname)
+    raise TrackingError(
+        f"unsupported structure format: {path}. The suffix is not .pdb or "
+        ".cif and the contents do not look like either."
+    )
 
 
 # --------------------------------------------------------------------------

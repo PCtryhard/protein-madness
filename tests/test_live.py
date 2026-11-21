@@ -224,12 +224,15 @@ def test_a_clash_is_named_too(tmp_path, live_cfg):
     assert bonds[0] in read_csv(live.csv_path)[0]["gated_bonds"]
 
 
-def test_a_non_required_bond_is_never_named_as_gating(tmp_path, pipeline_path):
-    """Variant 02's nitro contact is `required: false` -- it contributes to the
-    score but must never gate, however bad it is."""
-    cfg = load(pipeline_path, ROOT / "config/targets/02_his_asp_his.yaml")
+def test_a_non_required_bond_is_never_named_as_gating(tmp_path, live_cfg):
+    """`required: false` contributes to the score but must never gate, however
+    bad the contact is."""
+    bonds = list(live_cfg.target.hbonds)
+    relaxed = [bonds[0].model_copy(update={"required": False})] + bonds[1:]
+    cfg = live_cfg.model_copy(update={
+        "target": live_cfg.target.model_copy(update={"hbonds": relaxed})
+    })
     optional = [b.id for b in cfg.target.hbonds if not b.required]
-    assert optional, "variant 02 is expected to have an optional nitro bond"
     raw = json.dumps([
         {
             "bond_id": b.id, "distance": 9.0 if b.id in optional else 2.9,
@@ -241,12 +244,6 @@ def test_a_non_required_bond_is_never_named_as_gating(tmp_path, pipeline_path):
     live = LiveResults(tmp_path, cfg)
     live.append(mkrow(1, cfg, hbond_raw=raw))
     assert read_csv(live.csv_path)[0]["gated_bonds"] == ""
-
-
-# --------------------------------------------------------------------------
-# sequences and progress
-# --------------------------------------------------------------------------
-
 
 def test_sequences_are_appended_as_fasta(tmp_path, live_cfg):
     live = LiveResults(tmp_path, live_cfg)
@@ -309,17 +306,19 @@ def test_a_csv_with_different_columns_is_moved_aside(tmp_path, live_cfg, capsys)
     live = LiveResults(tmp_path, live_cfg)
     live.append(mkrow(1, live_cfg))
 
-    other = load(ROOT / "config" / "pipeline.yaml",
-                 ROOT / "config" / "targets" / "02_his_asp_his.yaml")
-    assert [b.id for b in other.target.hbonds] != [
-        b.id for b in live_cfg.target.hbonds
-    ], "this test needs two targets with different bond sets"
+    # A target with a different bond set, built here rather than requiring a
+    # second target file to exist -- which variant is available changes with
+    # the data.
+    first = live_cfg.target.hbonds[0]
+    other_target = live_cfg.target.model_copy(update={
+        "hbonds": [first.model_copy(update={"id": "a_different_bond_id"})]
+    })
+    other = live_cfg.model_copy(update={"target": other_target})
 
     again = LiveResults(tmp_path, other)
     assert "different set of columns" in capsys.readouterr().out
     assert read_csv(again.csv_path) == []
     assert list(tmp_path.glob("designs.*.csv")), "the old CSV should be kept"
-
 
 def test_reopening_with_the_same_columns_appends(tmp_path, live_cfg):
     live = LiveResults(tmp_path, live_cfg)
