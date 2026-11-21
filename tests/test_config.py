@@ -404,3 +404,63 @@ def test_seed_only_profile_still_declares_both_branches(pipeline_path):
     cfg = load_pipeline(ROOT / SMALL)
     assert cfg.search.wiggle.enabled
     assert cfg.search.mutate.enabled
+
+
+def test_wiggle_backbone_count_defaults_to_rfdiffusions(pipeline_path):
+    """null means 'use rfdiffusion.designs_per_parent'."""
+    cfg = load_pipeline(pipeline_path)
+    assert cfg.search.wiggle.designs_per_parent is None
+
+
+def test_wiggle_backbone_count_can_differ_from_cycle_zero(pipeline_path):
+    """Cycle 0 wants breadth from one seed; a wiggle wants a few neighbours of
+    something already good. One number cannot serve both."""
+    raw = yaml.safe_load(pipeline_path.read_text(encoding="utf-8"))
+    raw["rfdiffusion"]["designs_per_parent"] = 5
+    raw["search"]["wiggle"]["designs_per_parent"] = 2
+    cfg = PipelineCfg.model_validate(raw)
+    assert cfg.rfdiffusion.designs_per_parent == 5
+    assert cfg.search.wiggle.designs_per_parent == 2
+
+
+PROFILES = ("config/pipeline.yaml", "config/pipeline.small.yaml",
+            "config/pipeline.first.yaml")
+
+
+@pytest.mark.parametrize("profile", PROFILES)
+def test_every_profile_loads_and_cross_validates(profile):
+    for target in all_shipped_targets():
+        load(ROOT / profile, ROOT / target)
+
+
+def test_all_profiles_have_the_same_keys():
+    """A new tunable must reach every profile, not just the one being edited."""
+    def keys(node, prefix=""):
+        out = set()
+        if isinstance(node, dict):
+            for k, v in node.items():
+                out.add(f"{prefix}{k}")
+                out |= keys(v, f"{prefix}{k}.")
+        return out
+
+    sets = {
+        p: keys(yaml.safe_load((ROOT / p).read_text(encoding="utf-8")))
+        for p in PROFILES
+    }
+    reference = sets[PROFILES[0]]
+    for profile, found in sets.items():
+        assert found == reference, (
+            f"{profile} differs from {PROFILES[0]}:\n"
+            f"  missing: {sorted(reference - found)}\n"
+            f"  extra:   {sorted(found - reference)}"
+        )
+
+
+def test_the_first_run_profile_matches_the_requested_shape():
+    """5 backbones, 3 sequences each, 2 wiggles and 2 mutations per parent."""
+    cfg = load_pipeline(ROOT / "config/pipeline.first.yaml")
+    assert cfg.rfdiffusion.designs_per_parent == 5
+    assert cfg.ligandmpnn.sequences_per_backbone == 3
+    assert cfg.search.wiggle.designs_per_parent == 2
+    assert cfg.search.mutate.max_mutants_per_parent == 2
+    assert cfg.run.max_cycles == 3

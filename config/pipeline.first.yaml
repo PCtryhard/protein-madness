@@ -1,0 +1,126 @@
+# THE FIRST REAL RUN: 5 backbones, 3 sequences each, 2 wiggles and 2 mutations
+# per frontier design, 3 cycles.
+#
+#   python -m src.cli run --pipeline config/pipeline.first.yaml \
+#                         --target config/targets/04_gln_asp_his.yaml \
+#                         --name first-04
+#
+# WHAT THIS COSTS
+#
+# Every design is one Boltz-2 call, and the two cards run two designs at once.
+#
+#   cycle 0    5 backbones x 3 sequences                        = 15 designs
+#   cycle 1-3  wiggle:  2 parents x 2 backbones x 3 sequences   = 12
+#              mutate:  2 parents x 2 mutants                   =  4
+#                                                                 16 per cycle
+#   total                                              15 + 3x16 = 63 designs
+#
+# Timing inputs, both from this repo rather than invented: RUNLOG.md section 5
+# measured RFD3 at ~45 s per backbone, and PIPELINE.md plans for a few minutes
+# per Boltz-2 call on a 250-token system. These variants are smaller than that
+# -- variant 01's contigs expand to 52-112 residues plus 12 ligand atoms, so
+# 64-124 tokens -- so folding should sit at the fast end.
+#
+#   cycle 0    ~4 min RFdiffusion + ~1 min LigandMPNN + 15 folds / 2 cards
+#              = 13-28 min
+#   each cycle ~3 min RFdiffusion + ~1 min LigandMPNN + 16 folds / 2 cards
+#              = 12-28 min
+#   3 cycles   = 40-90 min
+#
+# Treat that as an order of magnitude, not a promise. Nothing in this pipeline
+# has ever been timed on a real GPU; the first run is what replaces these
+# numbers with measurements, and runs/<name>/progress.txt reports the real
+# designs/hour once two minutes of wall time have passed.
+#
+# IS THE 2-AND-2 SPLIT SENSIBLE?
+#
+# As a smoke test, yes: it exercises both branches with the smallest number of
+# designs that proves they work.
+#
+# As a search, the split is backwards relative to cost. A mutation skips
+# RFdiffusion and LigandMPNN entirely and goes straight to Boltz-2, so it is
+# the cheap branch; a wiggle pays for a diffusion run and a redesign first.
+# Two mutations out of the ~228 single mutants available in a 12-residue shell
+# is a 1% sample -- enough to prove the branch runs, not enough to find
+# anything. Once a run completes, push mutate.max_mutants_per_parent to 20-80
+# and leave the wiggle numbers where they are.
+
+run:
+  name: null
+  seed: 0
+  gpus: [0, 1]
+  max_cycles: 3                # bounded on purpose for a first run
+  patience: 2                  # see the note on eval_replicates below
+  min_delta: 0.005
+  # Kept at 1 deliberately. scripts/noise_control.py --from-csv says the angle
+  # terms are mostly prediction noise and recommends 3, which triples the Boltz
+  # cost. This run is testing the plumbing, not making design decisions, so 1
+  # is right here -- raise it to 3 (and patience to 4) for a run whose ranking
+  # you intend to act on.
+  eval_replicates: 1
+
+rfdiffusion:
+  run_inference: /path/to/RFdiffusion/scripts/run_inference.py
+  ckpt: Base_ckpt.pt
+  partial_T: 10
+  diffuser_T: 50
+  designs_per_parent: 5        # 5 backbones at cycle 0
+  extra_args: []
+
+ligandmpnn:
+  run_script: /path/to/LigandMPNN/run.py
+  checkpoint: ligandmpnn_v_32_010_25.pt
+  temperature: 0.1
+  sequences_per_backbone: 3    # 3 sequences per backbone
+  omit_AA: "CX"
+  pack_side_chains: false
+
+boltz:
+  binary: boltz
+  cache_dir: ~/.boltz
+  recycling_steps: 3
+  diffusion_samples: 1
+  sampling_steps: 200
+  use_potentials: false
+  no_kernels: true             # expected on sm_75; cluster/preflight.py confirms
+  precision: "32"              # bf16 unsupported on Turing; preflight confirms
+  max_tokens: 400
+
+protonation:
+  engine: pdbfixer
+  ph: 7.0
+
+scoring:
+  weights:
+    confidence: 0.70
+    geometry: 0.30
+  geometry_weights:
+    distance: 0.60
+    angle: 0.40
+  confidence:
+    metric: complex_ipde
+    ipde_best: 0.5
+    ipde_worst: 5.0
+  distance:
+    ideal: 2.9
+    tolerated: 3.5
+    fail: 4.5
+    clash: 2.2
+  angle:
+    tolerance: 60.0
+    rule: acceptor_side_always
+  aggregate: mean
+
+search:
+  keep_per_cycle: 2            # the frontier: 2 designs carried forward
+  wiggle:
+    enabled: true
+    parents_per_cycle: 2       # expand both frontier designs
+    designs_per_parent: 2      # 2 re-noised backbones from each
+    source: rfdiffusion_backbone
+  mutate:
+    enabled: true
+    parents_per_cycle: 2       # expand both frontier designs
+    shell_radius: 5.0
+    alphabet: "ADEFGHIKLMNQRSTVWY"
+    max_mutants_per_parent: 2  # 2 mutations each; see the note above

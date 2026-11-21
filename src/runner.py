@@ -560,6 +560,9 @@ class Runner:
                 input_pdb=job.backbone_path,
                 contigs=self._contigs_for(search.scaffold_id),
                 out_prefix=design_dir / "rfd",
+                # None falls through to rfdiffusion.designs_per_parent inside
+                # the stage wrapper, which is the documented default.
+                num_designs=self.cfg.pipeline.search.wiggle.designs_per_parent,
                 partial=True,       # the wiggle: re-noise for partial_T steps
                 gpu=gpu,
             )
