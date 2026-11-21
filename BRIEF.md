@@ -631,12 +631,39 @@ Two actions follow:
    outbound internet) and screen against a curated set of Kemp-eliminase and
    common α/β scaffolds.
 
-**Corollary, and it is important: do not take the easy path of mutating
-HG3.17 directly.** A redesign of a published enzyme is the fastest route to
->70 % identity and TM > 0.7 — a guaranteed zero. Our evolution starts from a
-*de novo RFD3 backbone*, and the only thing inherited from HG3.17 is the
-three-atom catalytic motif. That distinction is worth saying out loud in the
-pitch, because it is the difference between evolution and plagiarism.
+### The two arms, and why this one is de novo
+
+The team is running two approaches in parallel: **starting from an existing
+similar enzyme**, and **de novo**. This brief and `src/evolve/` are the **de
+novo arm**. Our founder is the RFD3-scaffolded, LigandMPNN-designed 260-mer from
+the verification run — built around nothing but the three-atom catalytic motif,
+a homologue of nothing. `scripts/founder_from_reference.py` extracts it and
+records its provenance.
+
+**The homologue arm carries an eligibility risk the de novo arm does not**, and
+it is worth saying plainly to whoever owns it rather than discovering it at
+submission:
+
+- starting from a published enzyme is the fastest route to **>70 % sequence
+  identity**, which disqualifies;
+- keeping its fold is the fastest route to **TM > 0.7**, which also
+  disqualifies;
+- and we currently **cannot measure TM-score** (no Foldseek, no TMalign, no
+  US-align anywhere on the cluster — §7), so that arm would be flying blind on
+  the rule most likely to zero it.
+
+That is not an argument against running it — a homologue will almost certainly
+hold its catalytic geometry better under re-prediction, which is exactly the
+thing the de novo arm is failing at (§1), so it is a genuinely informative
+comparison. It is an argument for that arm checking sequence identity with
+MMseqs2 against the provided UniRef90 DB **early and often**, and for getting an
+answer from the organisers about how they compute TM-score.
+
+The de novo arm's own eligibility position is comfortable: LigandMPNN sequences
+on an RFD3 backbone are homologues of nothing, and the only thing inherited from
+HG3.17 is the geometry of the base, the donor and the ligand. That distinction
+is worth saying out loud in the pitch, because it is the difference between
+design and redesign.
 
 ### Free lab validation — a second, separate objective
 
