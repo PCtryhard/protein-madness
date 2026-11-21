@@ -1,0 +1,28 @@
+# Shell scripts and SLURM batch files MUST have LF endings.
+#
+# This is not a style preference. RUNLOG.md section 4 records `sbatch`
+# rejecting a submission script because it had CRLF line endings, and the error
+# it gives does not mention line endings. The repo is edited on Windows, so
+# without this every new script is born broken.
+*.sh            text eol=lf
+*.sbatch        text eol=lf
+*.bash          text eol=lf
+
+# Same reasoning for anything the cluster reads as a script or config.
+*.py            text eol=lf
+*.yaml          text eol=lf
+*.yml           text eol=lf
+
+# Structure files are deliberately NOT normalised. Our readers slice fixed
+# columns and ignore a trailing CR, every tool in the pipeline does the same,
+# and normalising them would rewrite every committed PDB and CIF in data/ for
+# no behavioural gain. Line endings only matter where a shell executes the
+# file.
+
+# Keep binary things binary.
+*.pt            binary
+*.pth           binary
+*.ckpt          binary
+*.npz           binary
+*.png           binary
+*.pdf           binary

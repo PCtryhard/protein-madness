@@ -493,13 +493,13 @@ This matters in one concrete way: the two tools' contig syntax is not the same.
 RFD3 took `{"contig": "260-260", "unindex": "A48,A225,..."}`; RFdiffusion takes
 `contigmap.contigs=[...]` plus `diffuser.partial_T`. `src/stages/rfdiffusion.py`
 targets RFdiffusion as specified, and the `contigs` string in
-`config/targets/5fqj.yaml` is flagged as unverified against the actual
+the generated target files is flagged as unverified against the actual
 RFdiffusion build. **Confirm it in phase 1 before trusting a run.** If the
 project moves to RFD3 instead, the wrapper and the contig field change together.
 
 ### The real target's numbers are measured, not assumed
 
-`config/targets/5fqj.yaml` was built from `data/5A_5FQJ.pdb` in this repo, not
+The target files are built from the motif PDBs in this repo, not
 from the brief's example. What the seed actually contains:
 
 | | base | donor |
@@ -545,6 +545,54 @@ count and **raises for an unknown code** rather than guessing. 6NT is 12 heavy
 atoms, counted from the seed PDB and cross-checked against a real Boltz-2
 prediction by a test. 5FQJ is therefore 260 + 12 = **272 tokens**, inside the
 300 the brief prefers.
+
+### The target is seven variants, and their seeds carry deliberate clashes
+
+The spec assumes one target with several seeds. The data is seven *targets*:
+`data/01..07`, each a motif-only PDB with a different catalytic constellation
+(ASP or GLU at 229, HIS/ASN/GLN at 291, an optional HIS at 261). The motif
+residues and the hydrogen bonds differ per variant, and the `Target` schema
+holds one motif and one bond list per file, so each gets its own target file.
+`scripts/build_targets.py` generates all seven from the PDBs, and a test runs
+it with `--check` so a hand-edit cannot drift.
+
+That also changes cycle 0: these are motif-only inputs, so cycle 0 is motif
+scaffolding rather than partial diffusion of a full-length seed. The runner
+already did the right thing here (`partial=False` for the seed cycle,
+`partial=True` for the wiggle branch), but the contig strings are now
+scaffolding contigs — `20-40/A229-229/10-30/A291-291/20-40` and similar — and
+they are **this repo's construction, not a verified string.** Still phase 1's
+job to confirm.
+
+Only variant 01's geometry is real. The rest were modelled without repacking:
+`GLU229 OE2···N3` at 1.677 Å, `HIS261 NE2···O11` at 1.820 Å, `ASN291 ND2···N1`
+at 4.823 Å. Fine for an RFdiffusion input, useless as a score target, so the
+ideal angles come from the crystal where the acceptor is unmutated and from
+hybridisation otherwise.
+
+### The distance gate was asymmetric; it now has a clash end
+
+Finding those sub-2 Å contacts exposed a gap the spec left. The distance term
+is symmetric about the ideal, so 1.7 Å and 4.1 Å both score zero — but
+`is_gated` only fired above `distance.fail`. A design with an atom driven
+through the ligand would score zero on geometry and still be ranked on its
+confidence term, which at weight 0.7 is most of the total.
+
+`scoring.distance.clash` (default 2.2 Å) gates the short end too. Setting it
+very small recovers the spec's one-sided behaviour exactly.
+
+### Running it: the loop cannot be split across two clusters
+
+`RUNLOG.md` has RFD3 and LigandMPNN on the AWS box and Boltz-2 on Euler. That
+split cannot drive this pipeline: a cycle cannot pick its next frontier until
+its designs are scored, so a split means a cluster round trip per cycle, twelve
+times per variant.
+
+`cluster/preflight.py` is the tool that settles where to run — it checks the
+GPUs, runs a real bf16 matmul instead of assuming sm_75 cannot, and verifies
+all three tool paths resolve. `cluster/README.md` has the decision table and
+the gotchas that have actually bitten this project, CRLF line endings in
+`sbatch` scripts among them.
 
 ### The two open questions, as they now stand
 

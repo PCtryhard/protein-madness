@@ -165,13 +165,15 @@ class DistanceCfg(Strict):
     ideal: Positive = 2.9
     tolerated: Positive = 3.5
     fail: Positive = 4.5
+    clash: Positive = 2.2
 
     @model_validator(mode="after")
     def _ordered(self) -> DistanceCfg:
-        if not self.ideal < self.tolerated < self.fail:
+        if not self.clash < self.ideal < self.tolerated < self.fail:
             raise ValueError(
-                "scoring.distance must satisfy ideal < tolerated < fail, got "
-                f"ideal={self.ideal}, tolerated={self.tolerated}, fail={self.fail}"
+                "scoring.distance must satisfy clash < ideal < tolerated < fail, got "
+                f"clash={self.clash}, ideal={self.ideal}, "
+                f"tolerated={self.tolerated}, fail={self.fail}"
             )
         return self
 

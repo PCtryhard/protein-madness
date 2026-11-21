@@ -13,6 +13,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
+from tests.paths import EXAMPLE_TARGET, REAL_TARGET, all_shipped_targets
 from src.config import PipelineCfg, Target, load, load_pipeline, load_target
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,7 +31,7 @@ def test_shipped_pipeline_loads(pipeline_path):
 
 
 @pytest.mark.parametrize(
-    "target", ["config/targets/5fqj.yaml", "config/targets/example_target.yaml"]
+    "target", [REAL_TARGET, EXAMPLE_TARGET]
 )
 def test_shipped_targets_load(target):
     loaded = load_target(ROOT / target)
@@ -40,7 +41,7 @@ def test_shipped_targets_load(target):
 
 
 @pytest.mark.parametrize(
-    "target", ["config/targets/5fqj.yaml", "config/targets/example_target.yaml"]
+    "target", [REAL_TARGET, EXAMPLE_TARGET]
 )
 def test_shipped_targets_cross_validate_against_the_shipped_pipeline(
     pipeline_path, target
@@ -58,7 +59,7 @@ def test_shipped_targets_cross_validate_against_the_shipped_pipeline(
 
 
 @pytest.mark.parametrize(
-    "target", ["config/targets/5fqj.yaml", "config/targets/example_target.yaml"]
+    "target", [REAL_TARGET, EXAMPLE_TARGET]
 )
 def test_shipped_targets_also_load_under_the_other_angle_rule(pipeline_path, target):
     """Flipping scoring.angle.rule must stay a one-line config change."""
@@ -74,14 +75,14 @@ def test_shipped_targets_also_load_under_the_other_angle_rule(pipeline_path, tar
 
 def test_real_target_cross_validates_against_the_real_pipeline(pipeline_path):
     """The pairing that actually runs: 5fqj under the shipped angle rule."""
-    cfg = load(pipeline_path, ROOT / "config/targets/5fqj.yaml")
-    assert cfg.target.name == "5fqj"
+    cfg = load(pipeline_path, ROOT / REAL_TARGET)
+    assert cfg.target.name == "01_his_asp"
     for bond in cfg.target.hbonds:
         bond.validate_for_rule(cfg.pipeline.scoring.angle.rule)
 
 
 def test_every_hbond_id_is_unique_across_shipped_targets():
-    for target in ("config/targets/5fqj.yaml", "config/targets/example_target.yaml"):
+    for target in all_shipped_targets():
         loaded = load_target(ROOT / target)
         ids = [b.id for b in loaded.hbonds]
         assert len(set(ids)) == len(ids)
@@ -195,7 +196,7 @@ def test_acceptor_side_rule_requires_an_ideal_angle_on_every_bond(
     """A bond that cannot be scored is a startup error, not a NaN found after
     a GPU-hour."""
     raw = yaml.safe_load(
-        (ROOT / "config/targets/5fqj.yaml").read_text(encoding="utf-8")
+        (ROOT / REAL_TARGET).read_text(encoding="utf-8")
     )
     del raw["hbonds"][0]["acceptor_ideal_angle"]
     target_path = tmp_path / "broken.yaml"
@@ -213,7 +214,7 @@ def test_hbond_residue_must_be_in_the_motif(tmp_path):
     """A bond whose protein partner is free to mutate could be destroyed by
     the mutation branch, which would then optimise against its own score."""
     raw = yaml.safe_load(
-        (ROOT / "config/targets/5fqj.yaml").read_text(encoding="utf-8")
+        (ROOT / REAL_TARGET).read_text(encoding="utf-8")
     )
     raw["motif"]["fixed"] = [{"chain": "A", "resnum": 229}]   # drop HIS291
     with pytest.raises(ValidationError, match="not in motif.fixed"):
@@ -222,7 +223,7 @@ def test_hbond_residue_must_be_in_the_motif(tmp_path):
 
 def test_empty_seeds_rejected(tmp_path):
     raw = yaml.safe_load(
-        (ROOT / "config/targets/5fqj.yaml").read_text(encoding="utf-8")
+        (ROOT / REAL_TARGET).read_text(encoding="utf-8")
     )
     raw["seeds"] = []
     with pytest.raises(ValidationError, match="nothing to search"):
@@ -231,7 +232,7 @@ def test_empty_seeds_rejected(tmp_path):
 
 def test_empty_hbonds_rejected():
     raw = yaml.safe_load(
-        (ROOT / "config/targets/5fqj.yaml").read_text(encoding="utf-8")
+        (ROOT / REAL_TARGET).read_text(encoding="utf-8")
     )
     raw["hbonds"] = []
     with pytest.raises(ValidationError, match="geometry half"):
@@ -240,7 +241,7 @@ def test_empty_hbonds_rejected():
 
 def test_duplicate_seed_ids_rejected():
     raw = yaml.safe_load(
-        (ROOT / "config/targets/5fqj.yaml").read_text(encoding="utf-8")
+        (ROOT / REAL_TARGET).read_text(encoding="utf-8")
     )
     raw["seeds"].append(dict(raw["seeds"][0]))
     with pytest.raises(ValidationError, match="duplicate seed ids"):
@@ -251,7 +252,7 @@ def test_smiles_ligand_without_reference_sdf_rejected():
     """On the SMILES path Boltz assigns its own atom names, so the names in
     hbonds cannot be resolved without the reference SDF."""
     raw = yaml.safe_load(
-        (ROOT / "config/targets/5fqj.yaml").read_text(encoding="utf-8")
+        (ROOT / REAL_TARGET).read_text(encoding="utf-8")
     )
     raw["ligand"] = {
         "id": "6NT", "ccd": None, "smiles": "c1ccccc1", "reference_sdf": None
@@ -262,7 +263,7 @@ def test_smiles_ligand_without_reference_sdf_rejected():
 
 def test_ligand_needs_ccd_or_smiles():
     raw = yaml.safe_load(
-        (ROOT / "config/targets/5fqj.yaml").read_text(encoding="utf-8")
+        (ROOT / REAL_TARGET).read_text(encoding="utf-8")
     )
     raw["ligand"] = {"id": "X", "ccd": None, "smiles": None, "reference_sdf": None}
     with pytest.raises(ValidationError, match="ccd code or a smiles"):
@@ -271,7 +272,7 @@ def test_ligand_needs_ccd_or_smiles():
 
 def test_protein_atom_spec_needs_chain_and_resnum():
     raw = yaml.safe_load(
-        (ROOT / "config/targets/5fqj.yaml").read_text(encoding="utf-8")
+        (ROOT / REAL_TARGET).read_text(encoding="utf-8")
     )
     raw["hbonds"][0]["acceptor"] = {"site": "protein", "atom": "OD2"}
     with pytest.raises(ValidationError, match="chain and resnum"):
@@ -280,7 +281,7 @@ def test_protein_atom_spec_needs_chain_and_resnum():
 
 def test_ligand_atom_spec_must_not_carry_a_residue():
     raw = yaml.safe_load(
-        (ROOT / "config/targets/5fqj.yaml").read_text(encoding="utf-8")
+        (ROOT / REAL_TARGET).read_text(encoding="utf-8")
     )
     raw["hbonds"][0]["donor"] = {
         "site": "ligand", "atom": "N3", "chain": "A", "resnum": 400
@@ -348,3 +349,10 @@ def test_no_numeric_literals_in_scoring():
         "numeric literals in scoring code -- move them to config/pipeline.yaml "
         "or justify them in _ALLOWED_NUMBERS:\n" + "\n".join(offenders)
     )
+
+
+def test_clash_must_be_below_ideal(pipeline_path):
+    raw = yaml.safe_load(pipeline_path.read_text(encoding="utf-8"))
+    raw["scoring"]["distance"]["clash"] = 3.0
+    with pytest.raises(ValidationError, match="clash < ideal < tolerated < fail"):
+        PipelineCfg.model_validate(raw)

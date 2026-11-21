@@ -8,7 +8,7 @@ whole residues.
 
 (RFD3, which the earlier runs in this repo used, does expose a
 `select_fixed_atoms` option. That is a different tool with a different contig
-syntax; see the note in config/targets/5fqj.yaml. This wrapper targets
+syntax; see the note in scripts/build_targets.py. This wrapper targets
 RFdiffusion as PIPELINE.md specifies.)
 
 Every output PDB gets a `.trb` pickle beside it, which is what `tracking.py`

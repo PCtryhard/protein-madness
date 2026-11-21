@@ -1,8 +1,8 @@
 """The command-line interface. No web interface, by design.
 
-    python -m src.cli smoke    --target config/targets/5fqj.yaml
-    python -m src.cli measure  --target config/targets/5fqj.yaml --pdb data/5A_5FQJ.pdb
-    python -m src.cli run      --target config/targets/5fqj.yaml --name run1
+    python -m src.cli smoke    --target config/targets/01_his_asp.yaml
+    python -m src.cli measure  --target config/targets/01_his_asp.yaml \n                               --pdb data/01/inputs/5fqj-6cf4761/01_his_asp_.pdb
+    python -m src.cli run      --target config/targets/01_his_asp.yaml --name run1
     python -m src.cli resume    --run runs/run1
     python -m src.cli report    --run runs/run1
 

@@ -30,7 +30,9 @@ from src.tracking import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-SEED_PDB = ROOT / "data" / "5A_5FQJ.pdb"
+from tests.paths import BOLTZ_CIF as _BOLTZ_CIF, REAL_SEED, REAL_TARGET
+
+SEED_PDB = REAL_SEED
 
 
 # --------------------------------------------------------------------------
@@ -296,7 +298,7 @@ def test_provenance_json_is_stable():
 
 @pytest.mark.skipif(not SEED_PDB.exists(), reason="seed PDB not in this checkout")
 def test_real_target_bonds_resolve_and_measure_as_documented(pipeline_path):
-    """The numbers in config/targets/5fqj.yaml came from this structure.
+    """The numbers in the variant-01 target came from this structure.
 
     This is the check that they still do -- that the residue identities, atom
     names and measured geometry in the target file describe the seed PDB in the
@@ -304,7 +306,7 @@ def test_real_target_bonds_resolve_and_measure_as_documented(pipeline_path):
     """
     from src.scoring.hbond import measure_all
 
-    cfg = load(pipeline_path, ROOT / "config/targets/5fqj.yaml")
+    cfg = load(pipeline_path, ROOT / REAL_TARGET)
     structure = read_structure(SEED_PDB, cfg.target.ligand.ccd)
 
     # The motif residues exist and are the types the comments claim.
@@ -363,10 +365,7 @@ def test_identity_provenance_rejects_a_motif_absent_from_the_structure():
 # the CIF reader, against a real Boltz-2 prediction
 # --------------------------------------------------------------------------
 
-BOLTZ_CIF = (
-    ROOT / "data" / "No_mutation_run" / "boltz" / "seed-1" / "5A_01"
-    / "5A_01_model_0.cif"
-)
+BOLTZ_CIF = _BOLTZ_CIF
 
 
 @pytest.mark.skipif(not BOLTZ_CIF.exists(), reason="run data not in this checkout")

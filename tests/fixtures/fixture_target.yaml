@@ -3,7 +3,7 @@
 # Both bonds use acceptor_ideal_angle: 180, so the "ideal" fixture scores
 # exactly 1.0 on both terms and the arithmetic in the test is checkable by
 # eye. A real target's ideal is set by the acceptor's hybridisation; see
-# config/targets/5fqj.yaml.
+# config/targets/01_his_asp.yaml.
 
 name: fixture
 

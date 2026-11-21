@@ -165,6 +165,12 @@ FIXTURES = {
     "stretched": ((3.400, 130.0), (3.400, 130.0)),
     "mixed": ((2.900, 180.0), (3.400, 130.0)),
     "gated": ((5.000, 150.0), (2.900, 180.0)),
+    # A contact driven through the ligand. Scores 0 on distance exactly like
+    # the 5.000 A one above -- the term is symmetric -- so it must gate too,
+    # or a design with an atom inside the ligand could ride its confidence
+    # term into the frontier. 1.700 A is the value three of the seven shipped
+    # motif files actually contain (GLU229 OE2...N3 = 1.677 A).
+    "clashing": ((1.700, 140.0), (2.900, 180.0)),
 }
 
 

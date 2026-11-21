@@ -152,3 +152,56 @@ search stops. `reduce` writes its whole PDB to stdout while `run_command` keeps
 only the tail, so wiring it up naively would write a truncated structure and
 every angle measured on it would be wrong. A loud refusal costs an hour; either
 of those costs a run.
+
+---
+
+**2026-11-21 — The target is seven generated files, one per `data/0N` variant, not one file with seven seeds.**
+`scripts/build_targets.py` writes `config/targets/01_his_asp.yaml` through
+`07_gln_glu_his.yaml`; `tests/test_variants.py` runs it with `--check` so the
+generated files cannot drift from the generator.
+Why: the seven differ in which residues are fixed and which hydrogen bonds are
+scored, and the `Target` schema holds one motif and one bond list per file. They
+could not be seeds of a single target even if we wanted that. Generating them
+keeps the chemistry table (ASP→OD2/CG, GLU→OE2/CD, HIS→NE2/CD2, ASN→ND2/CG,
+GLN→NE2/CD) in one place instead of copied seven times, which is exactly the
+kind of thing that is wrong in one file out of seven.
+
+**2026-11-21 — Ideal angles are taken from the crystal only where the acceptor is unmutated; elsewhere from hybridisation.**
+Variant 01's two contacts are real 5FQJ geometry (2.734 Å/106.6°,
+3.084 Å/126.6°). Everything else in 02–07 was modelled in without repacking:
+`GLU229 OE2···N3` = 1.677 Å, `HIS261 NE2···O11` = 1.820 Å, `ASN291 ND2···N1` =
+4.823 Å, `GLN291 NE2···N1` = 3.860 Å. Those get 120° (sp2 carboxylate, sp2
+nitro oxygen) with a comment saying so.
+Why: reading an ideal out of a clash would make the scorer chase an impossible
+geometry. `tests/test_variants.py` asserts the clash distances as they are, so
+if the motif files are ever repacked the test fails and tells you to re-derive
+the ideals from the new coordinates. The ligand-side ideal (126.6° at `N1`) is
+the same in every variant by construction, because the acceptor is a ligand
+atom and its lone-pair direction does not depend on which residue donates.
+
+**2026-11-21 — The distance gate has a clash end, `scoring.distance.clash`, default 2.2 Å.**
+Supersedes nothing; it adds to the spec, which named only `distance.fail`.
+Why: the distance term is symmetric about the ideal, so 1.7 Å and 4.1 Å score
+the same zero, but only the long one gated. A design with an atom driven through
+the ligand would therefore score zero on geometry and still be ranked on its
+confidence term, which carries weight 0.7. Three of the seven shipped motif
+files contain sub-2 Å contacts, so this was not hypothetical. Setting `clash`
+very small recovers the spec's one-sided behaviour.
+
+**2026-11-21 — All three model stacks must live on one machine; the loop is not splittable.**
+`cluster/preflight.py` is the tool that decides which machine. `cluster/README.md`
+states the constraint and what to do in each outcome.
+Why: `RUNLOG.md` records RFD3 and LigandMPNN on AWS and Boltz-2 on Euler, which
+worked when generation and folding were separate batch steps with a human
+moving files. The search is a closed loop — a cycle cannot choose its next
+frontier until its designs are scored — so that split would mean a cluster round
+trip per cycle, twelve times per variant. If neither cluster can host all three,
+the pipeline needs a resumable two-phase mode it does not have, and that is real
+work rather than a config flag.
+
+**2026-11-21 — `.gitattributes` forces LF on `*.sh` and `*.sbatch`, and preflight checks it.**
+Why: `RUNLOG.md` §4 records `sbatch` rejecting a submission script for CRLF line
+endings, with an error that does not mention line endings. The repo is edited on
+Windows, so without this every new script is born broken. The check is scoped to
+`cluster/`, `scripts/` and `env/` on purpose — `data/` holds an archived sbatch
+file that does have CRLF, and flagging it would train people to ignore the check.

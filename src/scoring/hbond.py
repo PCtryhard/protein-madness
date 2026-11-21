@@ -231,13 +231,23 @@ def angle_term(angle: float, ideal: float, cfg: AngleCfg) -> float:
 
 
 def is_gated(measurements: list[BondMeasurement], cfg: DistanceCfg) -> list[str]:
-    """Ids of required bonds beyond `distance.fail`.
+    """Ids of required bonds that are impossible: too long, or a clash.
 
     Any one of them zeroes the design's total. The design is recorded as gated
     rather than deleted, so the search can see what it rejected.
+
+    The spec names only the long-distance gate (`distance.fail`). The short
+    end was added because the gate was asymmetric in a way that mattered: the
+    distance TERM is symmetric about the ideal, so a 1.7 A contact scores 0
+    exactly like a 4.0 A one, but only the long one gated. A design with an
+    atom driven through the ligand could therefore sit in the frontier on its
+    confidence term alone. Three of the seven shipped targets start from motif
+    files with sub-2 A modelled contacts, so this is not hypothetical.
+    `distance.clash` is the threshold; set it very small to recover the
+    spec's one-sided behaviour.
     """
     return [
         m.bond_id
         for m in measurements
-        if m.required and m.distance > cfg.fail
+        if m.required and (m.distance > cfg.fail or m.distance < cfg.clash)
     ]

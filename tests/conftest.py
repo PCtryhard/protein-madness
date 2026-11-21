@@ -9,8 +9,7 @@ import pytest
 from src.config import load, load_pipeline
 from src.tracking import identity_provenance, read_structure
 
-ROOT = Path(__file__).resolve().parents[1]
-FIXTURES = ROOT / "tests" / "fixtures"
+from tests.paths import FIXTURES, ROOT
 
 
 @pytest.fixture(scope="session")
@@ -90,3 +89,8 @@ def mixed(cfg):
 @pytest.fixture
 def gated(cfg):
     return load_fixture(cfg, "gated")
+
+
+@pytest.fixture
+def clashing(cfg):
+    return load_fixture(cfg, "clashing")

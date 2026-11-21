@@ -30,7 +30,9 @@ from .base import StageError, StageResult, run_command
 # estimate. A ligand not listed here must declare its atom count, because
 # guessing it would defeat the refusal.
 KNOWN_LIGAND_ATOM_COUNTS = {
-    "6NT": 12,   # 5-nitrobenzotriazole, counted from data/5A_5FQJ.pdb
+    # 5-nitrobenzotriazole. Counted from the motif PDBs in data/01..07, and
+    # cross-checked against a real Boltz-2 prediction by a test.
+    "6NT": 12,
 }
 
 

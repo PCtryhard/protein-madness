@@ -17,9 +17,12 @@ score stops improving.
    not.**
 
 ```bash
-python -m src.cli smoke --target config/targets/5fqj.yaml    # validate config, no GPU
-python -m pytest -q                                           # 220 tests, no GPU
+python -m src.cli smoke --target config/targets/01_his_asp.yaml   # validate, no GPU
+python -m pytest -q                                               # 257 tests, no GPU
+python cluster/preflight.py                                       # can this box run it?
 ```
+
+To run it on a cluster, start at **[cluster/README.md](cluster/README.md)**.
 
 > The previous pipeline — multi-backend scoring tiers, Euler/Modal, the
 > four-published-metrics scorer — now lives in **[outdated/](outdated/)** in
@@ -35,8 +38,8 @@ means anything.
 
 | Phase | What it covers | State |
 | --- | --- | --- |
-| **0** | Environment, per-stage VRAM and wall time, the ten-seed noise control | **not started** — needs the cluster |
-| **1** | Config, tracking, one linear pass end to end | **partly done** — config, tracking and the `measure` table pass against the real seed; the linear pass has never been run with weights |
+| **0** | Environment, per-stage VRAM and wall time, the ten-seed noise control | **tooling ready, not run** — `cluster/preflight.py` does the environment half; the noise control needs the cluster |
+| **1** | Config, tracking, one linear pass end to end | **partly done** — config, tracking and the `measure` table pass against all seven seeds; the linear pass has never been run with weights |
 | **2** | Scoring, with unit tests against hand-computed geometry | **done** — 27 scoring tests + 22 confidence tests, all green |
 | **3** | The search loop, sqlite store, sequence-hash cache | **code complete, never run** — logic is unit-tested; `resume` is deliberately not implemented |
 | **4** | Two-worker GPU pool, process isolation | **code complete, never run** |
@@ -45,14 +48,19 @@ In detail:
 
 | Area | State |
 | --- | --- |
-| `src/config.py` — schema, cross-validation, strict keys | real, 31 tests |
-| `src/tracking.py` — PDB/CIF readers, `.trb` map, resolver | real, 36 tests, checked against the real 5FQJ seed and a real Boltz-2 CIF |
-| `src/scoring/` — confidence, H-bond geometry, combination | real, 49 tests, values hand-derived in `tests/fixtures/build_fixtures.py` |
+| `src/config.py` — schema, cross-validation, strict keys | real, 32 tests |
+| `src/tracking.py` — PDB/CIF readers, `.trb` map, resolver | real, 36 tests, checked against the variant-01 seed and a real Boltz-2 CIF |
+| `src/scoring/` — confidence, H-bond geometry, combination | real, 56 tests, values hand-derived in `tests/fixtures/build_fixtures.py` |
+| the seven variants — atom names, token budget, clash record | real, 29 tests in `tests/test_variants.py` |
 | `src/search/` — frontier, patience, both branches | real, 30 tests |
 | `src/store.py` — lineage, leaderboard, cache | real, 35 tests |
 | `src/stages/` — command construction, token guard, output parsing | real, 39 tests; **no model has ever been invoked** |
 | `src/runner.py` — GPU pool and the per-scaffold loop | written, **not covered by tests and never run** |
 | `src/cli.py` — `smoke`, `measure`, `report` | run by hand, work; `run` needs the cluster |
+| `cluster/preflight.py` | run on this laptop; correctly reports what is missing. Never run on either cluster |
+| `cluster/euler/*`, `cluster/aws/*` | `bash -n` clean, `run_all.sh --dry-run` verified; **never submitted** |
+| `scripts/build_targets.py` | generates all 7 targets; a test asserts they are current |
+| `scripts/compare_no_mutation.py` | kept from the old pipeline, still runs against `data/No_mutation_run/` |
 | `protonation.engine: reduce` | **refuses** — see `src/stages/protonate.py` for why |
 | `src/cli.py resume` | **refuses** — the patience counter is not rebuilt from the database |
 
@@ -88,7 +96,7 @@ python -m pytest -q
 ```
 
 ```powershell
-python -m src.cli smoke --target config/targets/5fqj.yaml
+python -m src.cli smoke --target config/targets/01_his_asp.yaml
 ```
 
 `smoke` prints the resolved config — which bonds are measured where, against
@@ -104,7 +112,7 @@ the cluster and reached by the paths in `config/pipeline.yaml`.
 table. No GPU:
 
 ```powershell
-python -m src.cli measure --target config/targets/5fqj.yaml --pdb data/5A_5FQJ.pdb
+python -m src.cli measure --target config/targets/01_his_asp.yaml --pdb data/01/inputs/5fqj-6cf4761/01_his_asp_.pdb
 ```
 
 This resolves every named hydrogen bond through the full provenance chain and
@@ -112,10 +120,22 @@ prints its distance, angle and normalised terms. An atom it cannot resolve
 raises rather than defaulting — which is the whole point, because a missing
 atom scored as zero distance looks like a perfect bond.
 
-**Run the search.** Needs both GPUs and all three model stacks:
+**Run one search.** Needs both GPUs and all three model stacks:
 
 ```powershell
-python -m src.cli run --target config/targets/5fqj.yaml --name run1
+python -m src.cli run --target config/targets/01_his_asp.yaml --name run1
+```
+
+**Run all seven.** On the AWS box, one at a time, each using both cards:
+
+```powershell
+bash cluster/aws/run_all.sh
+```
+
+On Euler, as a 7-task array:
+
+```powershell
+sbatch cluster/euler/submit.sbatch
 ```
 
 **Report on a finished or interrupted run:**
@@ -129,21 +149,31 @@ full lineage from the recursive ancestry query, and its per-bond geometry.
 
 ## Before the first real run
 
-Phase 0, in order, from PIPELINE.md:
+Steps 1–3 of phase 0 are automated:
 
-1. Fill in the three tool paths in `config/pipeline.yaml`
-   (`rfdiffusion.run_inference`, `ligandmpnn.run_script`, `boltz.binary`).
-2. Settle whether bf16 works on sm_75 and whether `--no_kernels` is required.
-   Both have config entries already set to the expected answer; **confirm them,
-   do not assume.** Write the findings to `runs/hardware_notes.md`.
-3. Confirm the `contigs` string in `config/targets/5fqj.yaml` against the actual
-   RFdiffusion build. The earlier runs used RFD3, whose syntax differs — see the
-   PIPELINE.md appendix.
-4. Run the ten-seed noise control. This is the one that decides whether the
+```powershell
+python cluster/preflight.py --require-gpu --write runs/hardware_notes.md
+```
+
+It reports the GPUs, VRAM and compute capability, **actually runs a bf16
+matmul** rather than assuming sm_75 cannot, checks whether the optimised Boltz
+kernels are usable, verifies all three tool paths resolve, and writes phase 0's
+findings where PIPELINE.md asks for them. Fix every `FAIL` before submitting
+anything.
+
+Two things it cannot do for you:
+
+1. **Confirm the `contigs` strings.** They are generated by
+   `scripts/build_targets.py` and are its construction, not something taken
+   from a run that worked — the earlier runs used RFD3, whose contig syntax
+   differs. Verify one against the actual RFdiffusion build before trusting a
+   production run.
+2. **The ten-seed noise control.** One fixed sequence, ten Boltz-2 seeds, all
+   three score terms on each output. This is the one that decides whether the
    search is hill-climbing on signal or on noise, and it sets
    `run.eval_replicates` and `run.patience`.
 
-Step 4 is worth the hour it costs. Patience of 2 on a noisy objective
+Step 2 is worth the hour it costs. Patience of 2 on a noisy objective
 terminates on noise rather than on convergence, and sidechain placement in a
 designed pocket is exactly where a structure predictor is least reliable.
 
@@ -167,27 +197,61 @@ float inside a scoring function is a bug, and
 `tests/test_config.py::test_no_numeric_literals_in_scoring` is the grep for one,
 run as a test over the AST so docstrings and `"utf-8"` do not trip it.
 
-Each seed scaffold is an independent search with its own frontier, stopping
-condition and leaderboard. There is no competition between scaffolds, so
-results stay comparable across seeds and adding a seed to
-`config/targets/5fqj.yaml` adds a search with no other change.
+Each variant is an independent search with its own frontier, stopping
+condition and leaderboard. There is no competition between them, so results
+stay comparable and they can run in any order, on any machine, in parallel or
+one at a time.
 
-## The target
+## The seven variants
 
-`config/targets/5fqj.yaml` is the 5FQJ / HG3 Kemp eliminase pocket with ligand
-6NT. Two scored hydrogen bonds, both measured from `data/5A_5FQJ.pdb` in this
-repo:
+`data/01` … `data/07` hold one motif-only PDB each: the fixed catalytic
+residues plus the 6NT ligand, in 5FQJ numbering. Three positions vary, and the
+filenames read `<291>_<229>_<261>`:
 
-| | base | donor |
+| | A229 — base | A291 — donor | A261 — nitro |
+| --- | --- | --- | --- |
+| **01** `his_asp_` | ASP | HIS | — |
+| **02** `his_asp_his` | ASP | HIS | HIS |
+| **03** `asn_asp_his` | ASP | ASN | HIS |
+| **04** `gln_asp_his` | ASP | GLN | HIS |
+| **05** `his_glu_his` | GLU | HIS | HIS |
+| **06** `asn_glu_his` | GLU | ASN | HIS |
+| **07** `gln_glu_his` | GLU | GLN | HIS |
+
+A229 accepts from the benzotriazole `N3`-H, A291 donates to the ligand `N1`,
+and A261 (when present) donates to a nitro oxygen `O11`. One target file per
+variant, generated from the PDBs:
+
+```powershell
+python scripts/build_targets.py
+```
+
+**Only variant 01 carries crystal geometry.** Its two contacts are the real
+5FQJ values — ASP229 `OD2`···`N3` at 2.734 Å / 106.6°, HIS291 `NE2`···`N1` at
+3.084 Å / 126.6°. Every mutated or added residue in 02–07 was modelled in
+without repacking and its atoms land on top of the ligand:
+
+| contact | in the seed | |
 | --- | --- | --- |
-| bond | ASP229 `OD2` ← 6NT `N3`-H | HIS291 `NE2`-H → 6NT `N1` |
-| distance in the seed | 2.734 Å | 3.084 Å |
-| acceptor-side angle | 106.6° | 126.6° |
+| `GLU229 OE2···N3` | **1.677 Å** | impossible — modelled, clashes |
+| `HIS261 NE2···O11` | **1.820 Å** | impossible — modelled, clashes |
+| `ASN291 ND2···N1` | **4.823 Å** | too far — points away |
+| `GLN291 NE2···N1` | **3.860 Å** | too far |
 
-A test asserts these against the PDB, so the target file cannot drift from the
-structure it describes. Two points in it are still open — the donor residue
-identity and the base angle's reference value — and both are flagged in the
-file and in the PIPELINE.md appendix.
+That is harmless for an RFdiffusion motif input, because the scaffold and
+sidechains get rebuilt — but it means **the seed's own geometry is not a score
+target.** So the ideal angles are not read out of these files: where the
+acceptor exists unmutated in the crystal the measured value is used, and
+otherwise the hybridisation value for that chemistry, marked as such in the
+generated file. `tests/test_variants.py` asserts all of this, clashes included,
+so if someone repacks the motif files the test fails and says to re-derive the
+ideals.
+
+Finding those clashes also exposed a gap in the scorer, now fixed: the distance
+term is symmetric about the ideal, so a 1.7 Å contact scored zero exactly like
+a 4.0 Å one — but only the long one gated, meaning a design with an atom driven
+through the ligand could ride its confidence term into the frontier.
+`scoring.distance.clash` (default 2.2 Å) gates the short end too.
 
 ## Documents
 
@@ -195,6 +259,9 @@ file and in the PIPELINE.md appendix.
 
 - **[PIPELINE.md](PIPELINE.md)** — the specification, plus an appendix on how
   this repo differs from it and why.
+- **[cluster/README.md](cluster/README.md)** — how to run it on Euler or the
+  AWS box, and the one constraint that decides which: all three tools must be
+  on the same machine, because the loop cannot be split.
 - **[RUNLOG.md](RUNLOG.md)** — what was actually run and what it measured. The
   11.18 Å ligand-drift measurement in §1 is why this pipeline scores Boltz-2
   predictions rather than design-time geometry.

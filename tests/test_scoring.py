@@ -328,3 +328,79 @@ def test_an_unmapped_residue_raises(cfg, ideal):
     provenance.seed_to_hal.pop(("A", 229))
     with pytest.raises(AtomResolutionError, match="seed_to_hal"):
         measure(cfg, (structure, provenance))
+
+
+# --------------------------------------------------------------------------
+# the clash end of the gate
+# --------------------------------------------------------------------------
+
+
+def test_a_clashing_bond_is_measured_as_built(cfg, clashing):
+    by_id = {m.bond_id: m for m in measure(cfg, clashing)}
+    assert by_id["lig_n3_to_asp229_od2"].distance == pytest.approx(1.700, abs=DIST_TOL)
+
+
+def test_the_distance_term_is_zero_at_both_extremes(pipeline):
+    """The symmetry that makes the clash gate necessary: 1.7 A and 4.1 A are
+    the same distance from the 2.9 A ideal, and both score zero."""
+    cfg = pipeline.scoring.distance
+    assert distance_term(1.700, cfg) == 0.0
+    assert distance_term(4.100, cfg) == 0.0
+
+
+def test_a_clash_gates_the_design(cfg, clashing):
+    """Without this, a design with an atom driven through the ligand could sit
+    in the frontier on its confidence term alone."""
+    score = combine(1.0, measure(cfg, clashing), cfg.pipeline.scoring)
+    assert score.gated
+    assert score.gated_bonds == ["lig_n3_to_asp229_od2"]
+    assert score.total == 0.0
+
+
+def test_a_clash_on_a_non_required_bond_does_not_gate(cfg, clashing):
+    bonds = [
+        b.model_copy(update={"required": False}) if b.id == "lig_n3_to_asp229_od2" else b
+        for b in cfg.target.hbonds
+    ]
+    structure, provenance = clashing
+    measurements = measure_all(
+        bonds, structure, provenance, cfg.pipeline.scoring.angle.rule
+    )
+    assert not combine(1.0, measurements, cfg.pipeline.scoring).gated
+
+
+def test_lowering_the_clash_threshold_recovers_the_one_sided_gate(cfg, clashing):
+    """The spec's original behaviour is still reachable from config."""
+    scoring = cfg.pipeline.scoring.model_copy(
+        update={
+            "distance": cfg.pipeline.scoring.distance.model_copy(
+                update={"clash": 0.01}
+            )
+        }
+    )
+    score = combine(1.0, measure(cfg, clashing), scoring)
+    assert not score.gated
+    assert score.total > 0.0
+
+
+def test_a_bond_just_above_the_clash_threshold_does_not_gate(cfg, pipeline):
+    """2.2 A is the threshold; the gate must not eat a short-but-real bond."""
+    from src.scoring.hbond import BondMeasurement, is_gated
+
+    short = BondMeasurement(
+        bond_id="b", distance=2.25, angle=180.0, angle_kind="acceptor_side",
+        angle_ideal=180.0, required=True, atoms={},
+    )
+    assert is_gated([short], pipeline.scoring.distance) == []
+
+
+def test_the_real_motif_clash_would_gate_a_design(pipeline):
+    """GLU229 OE2...N3 = 1.677 A, the value in data/05..07. If a DESIGN came
+    out like that it must be gated, not ranked."""
+    from src.scoring.hbond import BondMeasurement, is_gated
+
+    clash = BondMeasurement(
+        bond_id="lig_n3_to_glu229_oe2", distance=1.677, angle=138.0,
+        angle_kind="acceptor_side", angle_ideal=120.0, required=True, atoms={},
+    )
+    assert is_gated([clash], pipeline.scoring.distance) == ["lig_n3_to_glu229_oe2"]

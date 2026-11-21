@@ -2,7 +2,8 @@
 # a target file is documented independently of any real target. It will not run
 # as-is: the seed PDBs do not exist.
 #
-# For the real target see config/targets/5fqj.yaml.
+# For the real targets see config/targets/0[1-7]_*.yaml, which are generated
+# from the motif PDBs by scripts/build_targets.py.
 #
 # Everything downstream refers to a hydrogen bond by its string `id`, never by
 # residue number, because the numbers change and the id does not.
@@ -43,7 +44,7 @@ hbonds:
     # under which EVERY bond is measured at the acceptor and so every bond
     # needs its own ideal. 120 deg is the sp2 carboxylate value; for a real
     # target, measure it in the seed structure instead of taking the textbook
-    # number -- see config/targets/5fqj.yaml. Under
+    # number -- see scripts/build_targets.py. Under
     # rule: split_by_donor_type this bond would be measured D-H...A against
     # 180 deg and this line would be unused.
     acceptor_ideal_angle: 120.0
