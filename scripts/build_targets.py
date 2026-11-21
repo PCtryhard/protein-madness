@@ -488,22 +488,59 @@ def discover(inputs_name: str | None = None) -> list[tuple[Path, Path]]:
     )
     for folder in folders:
         candidates = [d for d in (folder / "inputs").glob("*") if d.is_dir()]
+
+        # A PDB sitting directly in inputs/, with no subdirectory, is a valid
+        # layout and is what one push actually used. Treat inputs/ itself as a
+        # candidate so the layout can change without this script caring.
+        if list((folder / "inputs").glob("*.pdb")):
+            candidates.append(folder / "inputs")
+
         if not candidates:
-            print(f"warning: {folder}/inputs has no subdirectories, skipping",
-                  file=sys.stderr)
+            print(f"warning: {folder}/inputs holds no *.pdb and no "
+                  "subdirectories, skipping", file=sys.stderr)
             continue
 
         if inputs_name:
-            chosen = [d for d in candidates if d.name == inputs_name]
-            if not chosen:
-                raise SystemExit(
-                    f"{folder}/inputs has no subdirectory named {inputs_name!r}; "
-                    f"it has {sorted(d.name for d in candidates)}"
-                )
-            chosen_dir = chosen[0]
+            if inputs_name == ".":
+                chosen_dir = folder / "inputs"
+                if not list(chosen_dir.glob("*.pdb")):
+                    raise SystemExit(
+                        f"{chosen_dir} holds no *.pdb directly (--inputs .)"
+                    )
+            else:
+                chosen = [d for d in candidates if d.name == inputs_name]
+                if not chosen:
+                    raise SystemExit(
+                        f"{folder}/inputs has no subdirectory named "
+                        f"{inputs_name!r}; it has "
+                        f"{sorted(d.name for d in candidates if d.is_dir())}"
+                    )
+                chosen_dir = chosen[0]
+        elif len(candidates) == 1:
+            chosen_dir = candidates[0]
         else:
-            # Newest by mtime, with the name as a stable tiebreak.
-            chosen_dir = max(candidates, key=lambda d: (d.stat().st_mtime, d.name))
+            # REFUSE to guess. This used to pick the newest by mtime, which
+            # silently chose the wrong seed the first time it mattered: a git
+            # checkout gives every file nearly the same mtime, so some variants
+            # got the crystal motif and others got a full Boltz prediction with
+            # the ligand in the wrong pocket. Nothing in the output said so.
+            #
+            # A wrong seed is not a recoverable error -- every design in the run
+            # is scaffolded around it -- so an explicit choice is worth the
+            # inconvenience.
+            names = sorted(
+                "." if d == folder / "inputs" else d.name for d in candidates
+            )
+            listing = "\n".join(f"    {n}" for n in names)
+            raise SystemExit(
+                f"{folder}/inputs has {len(candidates)} candidate seed "
+                "locations and this script will not guess between them:\n"
+                f"{listing}\n"
+                "\nPass one explicitly, e.g.:\n"
+                f"    python scripts/build_targets.py --inputs {names[-1]}\n"
+                "\nUse --inputs . for a PDB sitting directly in inputs/.\n"
+                "Every variant folder must then contain that name."
+            )
 
         pdbs = sorted(chosen_dir.glob("*.pdb"))
         if not pdbs:
@@ -520,9 +557,14 @@ def discover(inputs_name: str | None = None) -> list[tuple[Path, Path]]:
                 "others in their own inputs subdirectory."
             )
         if len(candidates) > 1:
-            others = ", ".join(sorted(d.name for d in candidates if d != chosen_dir))
-            print(f"  {folder.name}: using inputs/{chosen_dir.name}  "
-                  f"(not: {others})")
+            others = ", ".join(
+                sorted(
+                    "." if d == folder / "inputs" else d.name
+                    for d in candidates if d != chosen_dir
+                )
+            )
+            label = "." if chosen_dir == folder / "inputs" else chosen_dir.name
+            print(f"  {folder.name}: using inputs/{label}  (not: {others})")
         found.append((folder, pdbs[0]))
     if not found:
         raise SystemExit(f"no variant folders found under {DATA}")
