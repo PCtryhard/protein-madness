@@ -1,0 +1,18 @@
+# RFD3 artefacts that cannot be obtained from any public source, and which
+# this repo therefore does NOT redistribute. Verify a copy you obtained
+# elsewhere against these, so you know you have the same RFD3 the recorded
+# runs used.
+#
+#   cd $SCRATCH/pdh/weights/rfd3 && sha256sum -c <(grep ckpt MANIFEST.sha256)
+#
+# The second line is a checksum OF the sorted per-file checksums of the
+# rfd3 and rfd3na Python trees (*.py, *.yaml, *.yml), not of a single file.
+# Reproduce it with:
+#   cd ~/pm-rfd3-env/lib/python3.12/site-packages \
+#     && find rfd3 rfd3na -name '*.py' -o -name '*.yaml' -o -name '*.yml' \
+#        | sort | xargs sha256sum | sha256sum
+#
+# Recorded 2026-11-21 from the working Euler install (jobs 21874137, 21879805).
+
+9b3f85923e0d51e9453e15cdd2f8c666e7ce096a60577f57d11bbc54ae6d67c1  rfd3_latest.ckpt
+2de4c47e674e9fb7aa19fdc28cf7e4f68035e9f6bd0987ff4412ca8edb10f1f8  rfd3+rfd3na-python-tree

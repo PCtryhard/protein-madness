@@ -119,8 +119,14 @@ class RFD3Cfg(Strict):
     binary: ExpandedPath = "rfd3"
     checkpoint: ExpandedPath
     n_batches: Annotated[int, Field(ge=1)] = 5
+    # ANGSTROMS OF NOISE, not a timestep count. RFD3 takes partial
+    # diffusion as `partial_t` on the per-example design spec, documented as
+    # "Angstroms of noise to add for partial diffusion ... t <= 15
+    # recommended" (rfd3/inference/input_parsing.py). The old name and the
+    # value 10 came from RFDiffusion, where partial_T IS a timestep count; 10
+    # A of noise would scramble a 260-residue backbone rather than wiggle it.
     diffusion_batch_size: Annotated[int, Field(ge=1)] = 1
-    partial_T: Annotated[int, Field(ge=1)] = 10
+    partial_t: Annotated[float, Field(gt=0.0, le=15.0)] = 2.0
     extra_args: list[str] = []
 
 

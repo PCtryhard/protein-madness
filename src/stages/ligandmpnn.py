@@ -180,10 +180,16 @@ def read_fasta(path: str | Path) -> dict[str, str]:
 
 def designed_sequences(output: LigandMPNNOutput) -> list[tuple[str, str]]:
     """Just the designs: everything whose header is not the input record."""
+    # LigandMPNN writes the INPUT sequence as its first record and the
+    # designs after it. Both records carry "T=0.1", so filtering on "T=" kept
+    # the input too -- every backbone then produced one extra "design" that
+    # was really RFD3's own backbone sequence threaded back, folded by Boltz
+    # at ~50 s a time and ranked on the leaderboard. Only the design records
+    # carry an "id=" field, so key on that.
     designs = [
         (header, seq)
         for header, seq in output.sequences.items()
-        if "T=" in header or "sample" in header.lower()
+        if "id=" in header or "sample" in header.lower()
     ]
     if designs:
         return designs
