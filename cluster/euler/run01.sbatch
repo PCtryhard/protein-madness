@@ -19,7 +19,7 @@
 # own code wants (numpy, pydantic, pyyaml).
 set -e -o pipefail
 
-REPO=$HOME/protein-madness
+REPO=${PM_REPO:-$HOME/protein-madness}
 RFD3_ENV=$HOME/pm-rfd3-env
 cd "$REPO"
 

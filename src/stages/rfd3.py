@@ -73,6 +73,8 @@ class DesignSpec:
     unindex: str
     select_fixed_atoms: dict[str, str]
     ligand: str | None = None
+    # Angstroms of noise for partial diffusion; None turns it off. RFD3 reads
+    # this from the design spec, NOT from a command-line override.
     partial_t: float | None = None
 
     def as_json_value(self) -> dict:
@@ -85,10 +87,10 @@ class DesignSpec:
         }
         if self.contig is not None:
             value["contig"] = self.contig
-        if self.partial_t is not None:
-            value["partial_t"] = self.partial_t
         if self.ligand:
             value["ligand"] = self.ligand
+        if self.partial_t is not None:
+            value["partial_t"] = float(self.partial_t)
         return value
 
 
@@ -167,7 +169,14 @@ def build_command(
     out_dir: Path,
     n_designs: int,
 ) -> list[str]:
-    """The RFD3 command line: a binary plus Hydra-style engine overrides."""
+    """The RFD3 command line: a binary plus Hydra-style engine overrides.
+
+    Partial diffusion is NOT set here. `rfd3 partial_T=10` fails Hydra
+    composition, and `+partial_T=10` then fails with
+    `RFD3InferenceConfig.__init__() got an unexpected keyword argument`.
+    RFD3 takes it as `partial_t` on the per-example design spec instead, so it
+    travels in the input JSON -- see DesignSpec.partial_t.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     keys = ",".join(design_keys)
     cmd = [
@@ -216,7 +225,9 @@ def run(
              for spec in specs]
 
     if partial:
-        specs = [replace(spec, contig=None, partial_t=float(cfg.partial_T))
+        # contig is dropped: RFD3 forbids `length` during partial diffusion
+        # and ignores the contig, since the parent's own length is the target.
+        specs = [replace(spec, contig=None, partial_t=float(cfg.partial_t))
                  for spec in specs]
     input_json = write_input_json(specs, out_dir / "rfd3_inputs.json")
     count = cfg.n_batches if n_designs is None else n_designs
@@ -256,12 +267,18 @@ def collect_outputs(out_dir: Path, design_keys: list[str]) -> list[RFD3Output]:
                 "lives in that file, so the design cannot be traced. Check that "
                 "dump_prediction_metadata_json was passed."
             )
-        index = 0
+        # The BATCH index is the digit before "_model_", not the last digit
+        # in the name: scanning backwards finds model_0's "0" first and so
+        # reported every backbone as index 0. That fed `mpnn_{index}`, so all
+        # five backbones shared one LigandMPNN output directory.
         stem = structure.name.split(".cif")[0]
-        for part in reversed(stem.split("_")):
-            if part.isdigit():
-                index = int(part)
-                break
+        parts = stem.split("_")
+        index = 0
+        if "model" in parts:
+            before = parts[: parts.index("model")]
+            index = next((int(p) for p in reversed(before) if p.isdigit()), 0)
+        else:
+            index = next((int(p) for p in reversed(parts) if p.isdigit()), 0)
         key = next((k for k in design_keys if k in stem), stem)
         outputs.append(
             RFD3Output(structure=structure, metadata=metadata,

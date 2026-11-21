@@ -22,6 +22,12 @@ module load cuda/12.1.1 >/dev/null 2>&1 || true
 module load eth_proxy >/dev/null 2>&1 || true
 set -u
 
+# Keep pip's download cache OFF $HOME: it has a 45 GB soft quota and a 500k
+# file limit, and a torch install caches gigabytes of wheels.
+export PIP_CACHE_DIR="${PIP_CACHE_DIR:-${SCRATCH:-/tmp}/pdh/cache-pip}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-${SCRATCH:-/tmp}/pdh/cache-xdg}"
+mkdir -p "$PIP_CACHE_DIR" "$XDG_CACHE_HOME"
+
 echo "python: $(command -v python3) ($(python3 --version 2>&1))"
 
 if [ -x "$VENV/bin/python" ]; then

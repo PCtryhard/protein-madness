@@ -53,7 +53,12 @@ rfd3:
   checkpoint: ${SCRATCH}/pdh/weights/rfd3/rfd3_latest.ckpt
   n_batches: 5                 # 5 backbones at cycle 0
   diffusion_batch_size: 1
-  partial_T: 10                # the wiggle's re-noising depth
+  # ANGSTROMS of noise for the wiggle's partial diffusion, not a timestep
+  # count. RFD3 recommends <= 15; 2 A is a gentle re-noise that keeps the fold
+  # and lets the motif settle. This was `partial_T: 10` -- an RFDiffusion
+  # timestep value that RFD3 rejects outright, which is why the wiggle branch
+  # had never run.
+  partial_t: 2.0
   extra_args: []
 
 # Not used on this cluster; kept null so the schema is explicit about it.

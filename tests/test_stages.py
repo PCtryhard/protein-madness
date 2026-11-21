@@ -185,21 +185,32 @@ def test_locate_output_finds_nested_results(tmp_path):
 # --------------------------------------------------------------------------
 
 
-def test_rfd3_partial_diffusion_sets_noise_in_design_spec(pipeline, tmp_path, monkeypatch):
-    from src.stages import rfd3
+def test_rfd3_partial_diffusion_sets_noise_in_design_spec(
+    pipeline, tmp_path, monkeypatch
+):
+    """partial_t travels in the input JSON, and the contig is dropped.
 
+    RFD3 forbids `length` during partial diffusion and ignores the contig,
+    since the parent's own length is the target.
+    """
     import json
+
+    from src.stages import rfd3
 
     source = tmp_path / "parent.pdb"
     source.touch()
     out = tmp_path / "out"
     spec = rfd3.DesignSpec("k", source, "260-260", "A42", {"A42": "ALL"})
     commands = []
-    monkeypatch.setattr(rfd3, "run_command", lambda cmd, **kwargs: commands.append(cmd))
+    monkeypatch.setattr(
+        rfd3, "run_command", lambda cmd, **kwargs: commands.append(cmd)
+    )
     monkeypatch.setattr(rfd3, "collect_outputs", lambda *args, **kwargs: [])
+
     rfd3.run(pipeline.rfd3, [spec], out, n_designs=4, partial=True)
+
     payload = json.loads((out / "rfd3_inputs.json").read_text())["k"]
-    assert payload["partial_t"] == pipeline.rfd3.partial_T
+    assert payload["partial_t"] == pipeline.rfd3.partial_t
     assert "contig" not in payload
     joined = " ".join(commands[0])
     assert "partial_T" not in joined
@@ -208,14 +219,83 @@ def test_rfd3_partial_diffusion_sets_noise_in_design_spec(pipeline, tmp_path, mo
     assert f"ckpt_path={pipeline.rfd3.checkpoint}" in joined
 
 
-def test_rfd3_fresh_scaffolding_omits_partial_T(pipeline, tmp_path):
+def test_rfd3_command_has_no_partial_diffusion_override(pipeline, tmp_path):
+    """Partial diffusion must NOT appear on the command line.
+
+    `rfd3 partial_T=10` fails Hydra composition outright, and `+partial_T=10`
+    then fails with `RFD3InferenceConfig.__init__() got an unexpected keyword
+    argument 'partial_T'`. There is no such CLI parameter. This test exists so
+    nobody puts one back.
+    """
     from src.stages import rfd3
 
     cmd = rfd3.build_command(
         pipeline.rfd3, tmp_path / "in.json", ["k"], tmp_path / "out",
         n_designs=4,
     )
-    assert "partial_T" not in " ".join(cmd)
+    joined = " ".join(cmd)
+    assert "partial_T" not in joined
+    assert "partial_t" not in joined
+
+
+def test_rfd3_partial_diffusion_travels_in_the_design_spec(tmp_path):
+    """RFD3 reads partial diffusion as `partial_t` on the per-example spec.
+
+    In ANGSTROMS of noise, not timesteps -- see RFD3's own field description.
+    """
+    import json
+
+    from src.stages import rfd3
+
+    spec = rfd3.DesignSpec(
+        key="k",
+        input_pdb=tmp_path / "parent.pdb",
+        contig=None,
+        unindex="A142,A179",
+        select_fixed_atoms={"A142": "OD1,CG,OD2", "A179": "CD2,CE1,NE2"},
+        ligand="6NT",
+        partial_t=2.0,
+    )
+    value = spec.as_json_value()
+    assert value["partial_t"] == 2.0
+
+    written = rfd3.write_input_json([spec], tmp_path / "in.json")
+    assert json.loads(written.read_text())["k"]["partial_t"] == 2.0
+
+
+def test_rfd3_backbone_index_is_the_batch_not_the_model(tmp_path):
+    """The batch index is the digit before "_model_", not the last digit.
+
+    Scanning the name backwards finds model_0's "0" first, which made every
+    backbone report index 0. That index feeds the LigandMPNN output directory
+    (`mpnn_{index}`), so all five backbones shared one directory -- it only
+    worked because the FASTA is looked up by stem.
+    """
+    from src.stages import rfd3
+
+    out = tmp_path / "rfd3"
+    out.mkdir()
+    for i in range(3):
+        stem = f"rfd3_inputs_01_his_asp_01_{i}_model_0"
+        (out / f"{stem}.cif.gz").write_bytes(b"")
+        (out / f"{stem}.json").write_text("{}", encoding="utf-8")
+
+    outputs = rfd3.collect_outputs(out, ["01_his_asp_01"])
+    assert sorted(o.index for o in outputs) == [0, 1, 2]
+
+
+def test_rfd3_fresh_scaffolding_omits_partial_t(tmp_path):
+    from src.stages import rfd3
+
+    spec = rfd3.DesignSpec(
+        key="k",
+        input_pdb=tmp_path / "seed.pdb",
+        contig="260-260",
+        unindex="A229,A291",
+        select_fixed_atoms={"A229": "ALL"},
+        ligand="6NT",
+    )
+    assert "partial_t" not in spec.as_json_value()
 
 
 

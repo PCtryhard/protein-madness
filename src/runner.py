@@ -657,8 +657,8 @@ class Runner:
                  or self.cfg.pipeline.rfd3.n_batches)
             self._stage_begin(
                 search.scaffold_id, "rfd3 (wiggle: partial diffusion)",
-                f"parent {job.parent_id}, partial_T="
-                f"{self.cfg.pipeline.rfd3.partial_T}, {n} backbone(s)",
+                f"parent {job.parent_id}, partial_t="
+                f"{self.cfg.pipeline.rfd3.partial_t} A, {n} backbone(s)",
             )
             backbones, stage_result = rfd_stage.run(
                 self.cfg.pipeline.rfd3,

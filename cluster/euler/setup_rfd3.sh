@@ -1,19 +1,26 @@
 #!/usr/bin/env bash
-# Build the RFD3 environment on Euler from PyPI.
+# Build the RFD3 environment on Euler.
 #
-# RFD3 itself is not installable -- it has no pip metadata and was hand-placed
-# into site-packages on the AWS reference mount -- but 122 of its 140
-# dependencies are ordinary PyPI pins. Those get installed here; the handful
-# that are private get copied separately.
+#   bash cluster/euler/setup_rfd3.sh
 #
-# torch comes from the PyTorch cu126 index rather than the freeze, because
-# pinning the nvidia-* wheels alongside it fights the index resolver.
+# RFD3 ships inside RosettaCommons' Foundry package, BSD 3-Clause, on PyPI as
+# `rc-foundry`. The `[rfd3]` extra pulls RFD3 and its dependencies; the wheel
+# provides the `rfd3` and `rfd3na` packages and an `rfd3` console script
+# (rfd3.cli:app), which is exactly what config/pipeline.yaml's rfd3.binary
+# points at.
 #
-# Login node only: Euler compute nodes have no outbound internet.
+# This replaces an older arrangement that installed 122 PyPI pins by hand and
+# then copied rfd3/rfd3na out of a hackathon AWS mount. That is no longer
+# necessary: rc-foundry 0.2.0's rfd3 tree was verified byte-for-byte identical
+# to the hand-placed copy the recorded runs used. The old pin list is kept as
+# cluster/euler/rfd3_requirements.txt for reference only.
+#
+# Python must be >=3.12,<3.13, which is what the module below provides.
+#
+# LOGIN NODE ONLY -- Euler compute nodes have no outbound internet.
 set -e -o pipefail
 
-VENV="$HOME/pm-rfd3-env"
-REQ="$HOME/rfd3_requirements.txt"
+VENV="${PM_RFD3_ENV:-$HOME/pm-rfd3-env}"
 
 set +u
 module purge >/dev/null 2>&1 || true
@@ -22,43 +29,82 @@ module load cuda/12.6.0 >/dev/null 2>&1 || module load cuda/12.1.1 >/dev/null 2>
 module load eth_proxy >/dev/null 2>&1 || true
 set -u
 
+# Keep pip's download cache OFF $HOME. rc-foundry[rfd3] pulls torch's full GPU
+# stack -- nvidia-* at ~1.9 GB and triton at ~1 GB -- and pip caches every
+# wheel it downloads. Left at its default that is ~10 GB in ~/.cache/pip,
+# against a 45 GB soft quota on a $HOME that also has a 500k file limit.
+export PIP_CACHE_DIR="${PIP_CACHE_DIR:-${SCRATCH:-/tmp}/pdh/cache-pip}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-${SCRATCH:-/tmp}/pdh/cache-xdg}"
+mkdir -p "$PIP_CACHE_DIR" "$XDG_CACHE_HOME"
+
 echo "python: $(command -v python3) ($(python3 --version 2>&1))"
-test -f "$REQ"
+echo "pip cache: $PIP_CACHE_DIR"
+echo
+echo "NOTE: this downloads roughly 4 GB (torch + CUDA libraries) and takes"
+echo "      5-15 minutes on a cold cache. rfd3 itself is about 5 MB and is"
+echo "      installed last, after its dependencies."
+
 
 if [ -x "$VENV/bin/python" ]; then
     echo "venv exists: $VENV"
+    # A working env is not worth clobbering: rc-foundry would re-resolve torch
+    # and could replace a build that is known good on this cluster's GPUs.
+    if "$VENV/bin/python" -c "import rfd3" >/dev/null 2>&1; then
+        echo
+        echo "rfd3 already imports in $VENV -- nothing to do."
+        echo "To rebuild from scratch, remove the directory first, or point"
+        echo "PM_RFD3_ENV at a new path."
+        "$VENV/bin/python" - <<'PY'
+import importlib.metadata as md
+try:
+    print("  rc-foundry   %s (pip)" % md.version("rc-foundry"))
+except md.PackageNotFoundError:
+    print("  rc-foundry   not a pip install (hand-placed rfd3 tree)")
+import torch
+print("  torch        %s" % torch.__version__)
+PY
+        exit 0
+    fi
 else
     python3 -m venv "$VENV"
     echo "created $VENV"
 fi
+
 set +u; . "$VENV/bin/activate"; set -u
 python -m pip install --upgrade -q pip setuptools wheel
 
 echo
-echo "=== 1/2 torch 2.7.1+cu126 ==="
-if python -c "import torch; assert torch.__version__.startswith('2.7.1')" 2>/dev/null; then
-    echo "already present: $(python -c 'import torch; print(torch.__version__)')"
-else
-    python -m pip install "torch==2.7.1" --index-url https://download.pytorch.org/whl/cu126
-fi
+echo "=== rc-foundry[rfd3] from PyPI ==="
+# Not --quiet: if a dependency cannot be resolved on this Python, the
+# resolver's message is the whole diagnosis.
+python -m pip install "rc-foundry[rfd3]" 2>&1 | tail -20
 
 echo
-echo "=== 2/2 the other 122 pins ==="
-# Not --quiet: if a pin cannot be satisfied on this Python, the resolver's
-# message is the whole diagnosis.
-python -m pip install -r "$REQ" 2>&1 | tail -25
+echo "=== our own structure libraries ==="
+python -m pip install -q "numpy>=2" pyyaml pydantic pytest
 
 echo
 echo "=== result ==="
 python - <<'PY'
 import importlib.metadata as md
-for name in ("torch", "atomworks", "hydride", "biotite", "lightning",
-             "hydra-core", "einx", "jaxtyping", "numpy", "scipy"):
+
+for name in ("rc-foundry", "torch", "numpy", "pydantic", "pyyaml"):
     try:
-        print(f"  {name:<12} {md.version(name)}")
+        print("  %-12s %s" % (name, md.version(name)))
     except md.PackageNotFoundError:
-        print(f"  {name:<12} MISSING")
+        print("  %-12s MISSING" % name)
+
+import rfd3            # noqa: F401
+import rfd3na          # noqa: F401
+from rfd3.cli import app   # noqa: F401
+print("  rfd3 / rfd3na import, rfd3.cli:app present")
+
+import torch
+print("  cuda available: %s" % torch.cuda.is_available())
 PY
+
 echo
-echo "NOTE: rfd3, rfd3na, foundry, coreweave_evaluations and cwevals are still"
-echo "      missing -- they have no PyPI release and are copied separately."
+echo "The rfd3 console script is at $VENV/bin/rfd3, which is what"
+echo "config/pipeline.yaml's rfd3.binary expects."
+echo
+echo "Next: bash cluster/euler/stage_deps.sh   (fetches the checkpoints)"
