@@ -129,9 +129,15 @@ The organisers' example uses `--constraint=g6.2xlarge --cpus-per-task=8`, which
 takes the entire allocation for one GPU. That is correct for their one-shot
 verification job and wrong for ours.
 
-**Therefore: ~2 GPUs × ~30 usable hours ≈ 60 GPU-hours, total, for everything.**
+**Therefore: ~2 GPUs × ~30 usable hours ≈ 60 GPU-hours from this cluster.**
 Boltz-2 is the expensive step and the only step that produces score. The entire
 design of the evolution loop below is shaped by that number.
+
+**Plus Euler**, which the organisers have cleared us to use (§8). That is
+potentially a large multiplier on the folding stage specifically — but it is
+unmeasured, unverified and account-gated, so **no plan depends on it until a
+Boltz-2 job has actually run there.** Treat AWS as the budget and Euler as
+upside: if it lands, generations multiply; if it does not, nothing in §4 breaks.
 
 ### The MSA question — worth 2× our throughput
 
@@ -564,7 +570,7 @@ understand the metrics are proxies.
 
 ---
 
-## 8. Portability — Slurm-shaped, and friendly to Euler
+## 8. Two clusters — Euler is permitted, and it is our second GPU pool
 
 Everything above runs as plain Slurm array jobs against a conda environment.
 Nothing should hardcode `g6.xlarge`, `gpu:l4:1`, or `/mnt/ref`. Instead:
@@ -577,22 +583,99 @@ configs/site/euler.yaml       partition, account, gres, module loads, $SCRATCH w
 Code reads the site file; `PDH_SITE` (or `--site`) picks it. Adding a third
 cluster should be a YAML file, not a patch.
 
-Three honest notes:
+**Euler is cleared for use** — confirmed with the organisers in person at the
+event (Max, Saturday morning). The written guide's "use only the provided
+computing resources" line is superseded by that; if anyone outside the team asks,
+the answer is that we checked and were told yes.
 
-1. **The organisers ask that competition compute stays on the provided
-   cluster** — *"We ask you to use only the provided computing resources for
-   fairness reasons."* So Euler support is for code portability, CPU-side work
-   and life after the hackathon. **Scored design runs stay on the AWS cluster.**
-   If anyone wants to use Euler for competition compute, that is a question for
-   an organiser first, not a decision we make quietly.
-2. **Euler's GPUs are RTX 2080Ti, 11 GB, sm_75, no bf16.** Boltz-2 on a
-   260-residue complex is very unlikely to fit. The parts of this pipeline that
-   *are* genuinely Euler-friendly are the CPU-side ones: Gate A and Gate B, the
-   scorer, the mutation operator, MMseqs2 searches, leaderboard and figures. Say
-   that rather than discovering it in a queue.
-3. Our existing `src/backends/euler.py` already knows about sbatch, arrays and
-   throttling. Keep it, strip the model-specific assumptions, and let it sit
-   behind the same site interface as the AWS backend.
+That makes Euler a second GPU pool, not a portability exercise, and the right
+question becomes **which half of the pipeline goes where.**
+
+### 8.1 The split: generate on AWS, fold on Euler
+
+Boltz folding is our bottleneck (§2); RFD3 backbones are not. So:
+
+| Stage | Cluster | Why |
+|---|---|---|
+| RFD3 scaffolding | **AWS** | the checkpoint, the env and the validated `Kemp.json` interface are all there, and backbones are not the bottleneck |
+| LigandMPNN | **AWS** (Euler optional) | small, fast, weights are public and MIT-licensed if we want a second copy |
+| **Boltz-2 folding** | **Euler** + AWS | **this is the whole point** — it is the expensive step, the weights are public, and more folding directly buys more generations |
+| Gates A/B, scorer, mutation, selection | either; CPU | trivial either side |
+| MMseqs2 eligibility | AWS | the 183 GB UniRef90 DB is already there |
+
+Folding is also the *easiest* stage to move: Boltz-2 is a pip install with
+publicly downloadable weights, and if the no-MSA decision (§2) holds, a fold job
+needs no network at run time at all — which neatly sidesteps Euler's biggest
+operational trap.
+
+**Do not copy `rfd3_latest.ckpt` off `/mnt/ref`.** Its redistribution terms are
+not something we have checked, and we do not need to: RFD3 stays on AWS. Boltz-2
+(MIT) and LigandMPNN (MIT) are ours to install anywhere.
+
+### 8.2 The gate that makes this safe: identical scores, both clusters
+
+This is the part that can quietly ruin the run, and it is not optional.
+
+**A design folded on Euler and a design folded on AWS must produce the same
+numbers, or we cannot put them in one leaderboard** — and if we cannot pool
+them, the evolution loop is selecting across two incomparable score scales and
+every comparison between generations is corrupted.
+
+Different GPU architectures (L4 is sm_89; Euler's cards vary), different kernel
+paths, TF32 and fp16 defaults, and `--no_kernels` on or off can all shift
+confidence numbers slightly. Slightly is enough: our selection signal between
+generations may be small.
+
+So, before a single Euler-folded design enters the leaderboard:
+
+1. Fold **the same sequence, same seed, same flags, same Boltz version (2.2.1)**
+   on both clusters.
+2. Compare iPDE, both contact distances, burial and pLDDT.
+3. If they agree to within a tolerance we write down today — pool freely.
+4. If they do not — **do not mix them.** Use Euler for triage only and keep the
+   5-seed confirmation runs (§4.4) on one cluster, so that every number that
+   decides a parent came from the same machine.
+
+This is the old `README.md` "three-way smoke test" promise, except now it has
+teeth and a deadline. It is **Gate 3b**, and it blocks pooling, not folding —
+Euler can start producing triage folds before it passes.
+
+### 8.3 What we need to find out about Euler, fast
+
+Our own `TODO.md` is honest that this path has never been exercised. Open items,
+in the order they block things:
+
+- **Which shareholder account?** Euler GPU nodes are `-A/--account=<share>` only
+  and we do not know ours (`TODO.md` B6). Without it, submission fails outright.
+  Ask whoever on the team has used Euler GPUs before.
+- **Which GPUs can we actually get?** `sinfo` it. Boltz-2 on a 260-residue
+  complex plus ligand wants roughly 24 GB. The 11 GB RTX 2080Ti's in
+  `DECISIONS.md` almost certainly will not do it; 3090/4090/A100 nodes will.
+  **If we can only reach 11 GB cards, Euler cannot fold and this whole section
+  collapses back to CPU-side work** — find this out first, it is one command.
+- **Boltz-2 install + weights staged on the login node**, not in a job: compute
+  nodes have no outbound internet (`MANIFEST.md`), and a client that retries
+  until walltime looks exactly like a hang.
+- `--gres=gpumem` suffix is unverified (`TODO.md` B4); a GRES parse error is the
+  symptom. One real submission settles it.
+- **`$SCRATCH` is purged after ~2 weeks and is not backed up.** Fine for a
+  weekend, but results come home to `/mnt/work` or git, not Euler scratch.
+
+`src/backends/euler.py` already knows sbatch, arrays and throttling — keep it,
+strip the model-specific assumptions, and run it behind the same site interface
+as the AWS backend.
+
+### 8.4 Site profiles
+
+```
+configs/site/pdh-aws.yaml     partition gpu, constraint g6.xlarge, gres gpu:l4:1, /mnt/ref roots
+configs/site/euler.yaml       partition, account, gres + gpumem, module loads, $SCRATCH weights
+```
+
+Code reads the site file; `PDH_SITE` (or `--site`) picks it. Nothing hardcodes
+`g6.xlarge`, `gpu:l4:1` or `/mnt/ref`. Adding a third cluster is a YAML file,
+not a patch. **Every leaderboard row records which site folded it** — without
+that column, §8.2 is unenforceable after the fact.
 
 ---
 
@@ -684,6 +767,13 @@ the evolution loop is optimising the wrong thing. Blocks everything downstream.
 **GATE 3 — MSA decision made and written down.** Doubles or halves throughput.
 Decide by early afternoon, not by evening.
 
+**GATE 3b — Euler: can it fold, and do its numbers match?** Two separate
+questions, in order. (i) Do we have a shareholder account and ≥24 GB cards? One
+`sinfo` and one submission answer it — **if not, Euler is CPU-side only and we
+stop spending time on it.** (ii) Does the same sequence at the same seed give
+the same metrics on both clusters (§8.2)? Until (ii) passes, Euler folds may be
+used for triage but must not be pooled into the leaderboard.
+
 **GATE 4 — generation 0 scored on one backbone.** The loop is real. Only now do
 we set population size and generation count from the Gate 1 measurement.
 
@@ -718,6 +808,7 @@ Dependencies run top to bottom. Items 1–3 unblock everything else.
 | 1 | `src/score/official.py` — the four metrics from one Boltz output dir, exact atom names | reproduces the example's `summary.json` numbers | Scorer |
 | 2 | Batched Boltz driver — many YAMLs, one process, one model load | folds 8 designs in one job; minutes-per-fold recorded | Cluster |
 | 3 | `src/backends/pdh_slurm.py` + `configs/site/*.yaml` — array submission, `--constraint=g6.xlarge`, `gpu:l4:1`, hard refusal to target `l4big` | an array of 8 runs and completes; site file swappable | Cluster |
+| 3b | Euler: account + GPU survey, Boltz-2 installed, weights staged on the login node, `configs/site/euler.yaml` | one Boltz-2 fold completes on Euler; cross-cluster comparison run (§8.2) recorded | Cluster |
 | 4 | Gate A — burial, motif geometry, ligand SASA off a backbone, CPU | < 1 s per backbone; burial agrees with the scorer's metric 3 | Loop |
 | 5 | `src/evolve/mutate.py` — the three-mode operator, k-schedule, position weights, hard exclusions | unit-tested on a toy sequence; never mutates base/donor | Loop |
 | 6 | `src/evolve/select.py` — triage/confirm, mean − k·spread, hard gates | unit-tested on synthetic scores with injected noise | Loop |
@@ -777,6 +868,9 @@ Point 7 is not modesty, it is what makes 1–6 credible. Every number comes out 
 | The MSA turns out to matter | we lose the second GPU and halve throughput. Survivable: fewer, more carefully chosen designs. Find out early. |
 | Our calibration controls come out in the wrong order | say so. A team that discovered its metric is noisy and reported it honestly beats a team that ranked on a number it never questioned. |
 | Someone argues for an exception to the Sunday freeze | the answer is in this file and it is no. |
+| Euler and AWS disagree on the same sequence | do not pool. Euler does triage only; every score that decides a parent comes from one cluster. §8.2. |
+| Euler turns out to be 11 GB cards only | it cannot fold Boltz-2 at 260 residues. Drop it to CPU-side work immediately rather than fighting it — this is Gate 3b(i) and it is one command. |
+| We spend half a day standing Euler up and get nothing | the §8.3 list is ordered so the cheapest disqualifying question comes first. Timebox it: if Boltz has not folded on Euler by Saturday evening, it is not part of this weekend. |
 | A metric looks suspiciously good | assume a residue-numbering bug first. Three numbering systems are in play. |
 
 ---
@@ -796,10 +890,14 @@ Point 7 is not modesty, it is what makes 1–6 credible. Every number comes out 
 6. **How do we spend the five free lab-validation slots?** Recommendation:
    lineage diversity and a deliberate metric-probing spread, not the top five.
 7. **Who owns the submission file?** One person. Recommendation: person 1.
-8. **Do we stay on the provided stack (RFD3 / LigandMPNN / Boltz-2)?**
+8. **Who owns the Euler bring-up, and what is its timebox?** Recommendation:
+   one person, answers §8.3's first two questions before lunch, and if Boltz-2
+   has not folded on Euler by Saturday evening we drop it. It is upside, not
+   budget — nothing in §4 may depend on it.
+9. **Do we stay on the provided stack (RFD3 / LigandMPNN / Boltz-2)?**
    Recommendation: yes — §3. Folding is not negotiable at all. Scaffolding is
    negotiable in principle but the integration cost is real and backbones are
    not our bottleneck. Ask an organiser whether RFD4's absence is deliberate.
-9. **Which LigandMPNN checkpoint and temperature?** Recommendation: baseline at
+10. **Which LigandMPNN checkpoint and temperature?** Recommendation: baseline at
    `ligandmpnn_v_32_010_25` / T=0.1 to match the verified example, sweep `005`
    and `020` and T=0.2–0.3 once the loop turns.
