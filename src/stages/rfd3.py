@@ -27,7 +27,7 @@ are not interchangeable and the differences all matter:
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from ..config import MotifCfg, RFD3Cfg, Seed
@@ -120,6 +120,27 @@ def spec_from_seed(seed: Seed, motif: MotifCfg, ligand_id: str,
     )
 
 
+def _normalised_input(seed: Path, out_dir: Path) -> Path:
+    """A copy of `seed` with a suffix the external tools understand.
+
+    Returns `seed` unchanged when it is already .pdb or .cif. Otherwise parses
+    it with our own content-sniffing reader and writes a .pdb into `out_dir`,
+    leaving the original untouched.
+    """
+    from ..tracking import read_structure, write_pdb
+
+    name = seed.name.lower()
+    if name.endswith((".pdb", ".ent", ".cif", ".mmcif")):
+        return seed
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    base = seed.name.split(".pdb")[0] if ".pdb" in seed.name else seed.stem
+    target = out_dir / f"{base}.pdb"
+    if not target.exists():
+        write_pdb(read_structure(seed), target)
+    return target
+
+
 def write_input_json(specs: list[DesignSpec], path: Path) -> Path:
     """Write the RFD3 input file.
 
@@ -185,6 +206,17 @@ def run(
     for spec in specs:
         if not spec.input_pdb.exists():
             raise StageError(f"rfd3: input PDB not found: {spec.input_pdb}")
+
+    # Every external tool here dispatches on the FILE EXTENSION, not on
+    # content. A real seed is named 01_his_asp_.pdb.pre-boltz, and ProDy (via
+    # LigandMPNN) duly tries to parse it as mmCIF and reports "no atoms". Our
+    # own readers sniff the content, but the tools do not.
+    #
+    # So normalise at the boundary: write a properly-suffixed copy into THIS
+    # RUN's directory and hand the tools that. The alternative -- renaming the
+    # file in data/ -- edits input that belongs to whoever produced it.
+    specs = [replace(spec, input_pdb=_normalised_input(spec.input_pdb, out_dir))
+             for spec in specs]
 
     input_json = write_input_json(specs, out_dir / "rfd3_inputs.json")
     count = cfg.n_batches if n_designs is None else n_designs

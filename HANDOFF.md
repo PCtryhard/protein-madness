@@ -93,15 +93,14 @@ bash cluster/aws/run_all.sh 01 02
 ```
 
 That is roughly an hour per variant. It prints which profile it is using and
-whether the run is seed-only or a full search before it starts anything. See [cluster/README.md](cluster/README.md)
-for Euler, and the timing table in
-[config/pipeline.small.yaml](config/pipeline.small.yaml) for where the estimate
-comes from.
+whether the run is seed-only or a full search before it starts anything. See
+[cluster/README.md](cluster/README.md) for Euler, and the timing table in
+[config/pipeline.yaml](config/pipeline.yaml) for where the estimate comes from.
 
 ## What does not need touching
 
-- `config/pipeline.yaml` and `config/pipeline.small.yaml` — no target-specific
-  values in them
+- `config/pipeline.yaml` — the only pipeline config, and nothing in it is
+  target-specific
 - `config/targets/*.yaml` — generated; edit `scripts/build_targets.py` instead
 - any code in `src/` — the chemistry table lives in `scripts/build_targets.py`,
   and a residue type it does not know is a hard error telling you to add it

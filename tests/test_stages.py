@@ -368,3 +368,36 @@ def test_ligandmpnn_interpreter_can_be_set_explicitly(pipeline, tmp_path):
         cfg, tmp_path / "bb.pdb", tmp_path / "out", "A12", 4
     )
     assert cmd[0] == "/envs/x/bin/python"
+
+
+def test_rfd3_normalises_an_oddly_suffixed_seed(tmp_path, pipeline):
+    """Every external tool dispatches on the file extension, not content. A
+    real seed is named 01_his_asp_.pdb.pre-boltz, and ProDy duly parses it as
+    mmCIF and reports "no atoms". The fix writes a properly-suffixed copy into
+    the RUN directory, never renaming the file in data/."""
+    from src.stages.rfd3 import _normalised_input
+    from tests.paths import REAL_SEED
+
+    assert REAL_SEED.exists(), REAL_SEED
+    assert not REAL_SEED.name.endswith(".pdb"), "this test needs an odd suffix"
+
+    out = _normalised_input(REAL_SEED, tmp_path)
+    assert out.suffix == ".pdb"
+    assert out.parent == tmp_path, "the copy goes in the run dir, not data/"
+    assert REAL_SEED.exists(), "the original must be left alone"
+
+    # and it round-trips: same motif residues, same ligand
+    from src.tracking import read_structure
+
+    before = read_structure(REAL_SEED, "6NT")
+    after = read_structure(out, "6NT")
+    assert set(after.residues) == set(before.residues)
+    assert set(after.ligand) == set(before.ligand)
+
+
+def test_rfd3_leaves_a_normal_pdb_alone(tmp_path, pipeline):
+    from src.stages.rfd3 import _normalised_input
+
+    normal = tmp_path / "already.pdb"
+    normal.write_text("ATOM\n", encoding="utf-8")
+    assert _normalised_input(normal, tmp_path / "run") == normal
