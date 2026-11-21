@@ -3,10 +3,31 @@
 Repo for the **enzyme design track**, D-BSSE Protein Design Hackathon, Basel,
 21–22 November 2026. Work starts Saturday 08:30; pitches Sunday 17:30.
 
-**The challenge is not announced until Saturday morning.** This repo is built so
-that on Saturday only `configs/target.yaml` changes and the whole pipeline runs
-end to end on the new enzyme. Nothing hardcodes a target, a sequence, a reaction
-or a metric.
+## ▶ Start here
+
+**The challenge is announced: design a de novo Kemp eliminase.** Two documents,
+in this order:
+
+1. **[BRIEF.md](BRIEF.md)** — what we are scored on, what the compute actually
+   is, and the strategy. Read this first; it is the plan the team agreed from.
+2. **[EVOLVE.md](EVOLVE.md)** — how to *run* the design loop, for both the
+   de novo and the partial-diffusion arms. This is the practical guide.
+
+The one thing to know before anything else: **we submit sequences, not
+structures.** The organisers re-fold our FASTA with Boltz-2 and score the
+result, and the organisers' own reference design puts the catalytic base
+**11.18 Å** from the ligand after re-prediction — when the design had it at
+2.53 Å. Closing that gap is the entire job.
+
+```bash
+pytest -q                                    # 166 tests, no GPU needed
+python -m src.evolve.driver --help           # the design loop
+```
+
+> Historical note: this repo was built *before* the challenge was announced, to
+> be target-agnostic. `PLAN.md`, `MANIFEST.md` and much of `TODO.md` still
+> describe that world — Euler/Modal backends, ESMFold, an unknown target. They
+> are kept for the record; **`BRIEF.md` supersedes them.**
 
 **The differentiator here is evaluation, not generation.** Every team will
 produce sequences; few will be able to say anything defensible about whether
@@ -127,6 +148,8 @@ metric whose inputs are missing is `NaN` with a note, or raises — never 0.0.
 
 ## Documents
 
+- **[BRIEF.md](BRIEF.md) — the strategy. Start here.**
+- **[EVOLVE.md](EVOLVE.md) — how to run the design loop (both arms).**
 - [ONBOARDING.md](ONBOARDING.md) — zero to passing smoke test in under 20 minutes
 - [PLAN.md](PLAN.md) — the 30-hour weekend timeline, owners, hard freeze
 - [PITCH.md](PITCH.md) — Sunday's pitch skeleton; numbers fill in automatically
