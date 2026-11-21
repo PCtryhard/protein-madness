@@ -185,21 +185,26 @@ def test_locate_output_finds_nested_results(tmp_path):
 # --------------------------------------------------------------------------
 
 
-def test_partial_diffusion_sets_partial_T(pipeline, tmp_path):
-    cmd = rfdiffusion.build_command(
-        pipeline.rfdiffusion, tmp_path / "in.pdb", "260-260",
-        tmp_path / "out", 4, partial=True,
+def test_rfd3_partial_diffusion_sets_partial_T(pipeline, tmp_path):
+    from src.stages import rfd3
+
+    cmd = rfd3.build_command(
+        pipeline.rfd3, tmp_path / "in.json", ["k"], tmp_path / "out",
+        n_designs=4, partial=True,
     )
     joined = " ".join(cmd)
-    assert f"diffuser.partial_T={pipeline.rfdiffusion.partial_T}" in joined
-    assert "contigmap.contigs=[260-260]" in joined
-    assert "inference.num_designs=4" in joined
+    assert f"partial_T={pipeline.rfd3.partial_T}" in joined
+    assert "json_keys_subset=[k]" in joined
+    assert "n_batches=4" in joined
+    assert f"ckpt_path={pipeline.rfd3.checkpoint}" in joined
 
 
-def test_fresh_scaffolding_omits_partial_T(pipeline, tmp_path):
-    cmd = rfdiffusion.build_command(
-        pipeline.rfdiffusion, tmp_path / "in.pdb", "260-260",
-        tmp_path / "out", 4, partial=False,
+def test_rfd3_fresh_scaffolding_omits_partial_T(pipeline, tmp_path):
+    from src.stages import rfd3
+
+    cmd = rfd3.build_command(
+        pipeline.rfd3, tmp_path / "in.json", ["k"], tmp_path / "out",
+        n_designs=4, partial=False,
     )
     assert "partial_T" not in " ".join(cmd)
 

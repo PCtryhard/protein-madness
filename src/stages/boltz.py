@@ -177,6 +177,8 @@ def build_command(
         "--sampling_steps", str(cfg.sampling_steps),
         "--output_format", "mmcif",
         "--write_full_pae",
+        "--accelerator", cfg.accelerator,
+        "--devices", str(cfg.devices),
     ]
     if cfg.no_kernels:
         cmd.append("--no_kernels")
@@ -185,6 +187,45 @@ def build_command(
     if gpu is not None:
         cmd += ["--devices", "1"]
     return cmd
+
+
+def prepare_cache(cfg: BoltzCfg, cache_dir: Path) -> Path:
+    """Symlink the pre-downloaded weights into this run's cache directory.
+
+    Boltz fetches its weights on first use. That fails on a compute node with
+    no outbound internet, and even where it works it is 6 GB per cache. The
+    clusters ship the assets read-only, so the wrapper links them in:
+    boltz2_conf.ckpt, boltz2_aff.ckpt, mols.tar and the mols/ directory.
+
+    Does nothing when `assets_dir` is unset, which is the right behaviour on a
+    machine that can download.
+    """
+    cache_dir = Path(cache_dir).expanduser()
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    if not cfg.assets_dir:
+        return cache_dir
+
+    assets = Path(cfg.assets_dir).expanduser()
+    if not assets.is_dir():
+        raise StageError(
+            f"boltz.assets_dir is set to {assets}, which is not a directory. "
+            "Unset it to let Boltz download its own weights, or point it at the "
+            "staged assets."
+        )
+
+    wanted = ("boltz2_conf.ckpt", "boltz2_aff.ckpt", "mols.tar", "mols")
+    missing = [n for n in wanted if not (assets / n).exists()]
+    if missing:
+        raise StageError(
+            f"boltz.assets_dir {assets} is missing {missing}. Boltz would try "
+            "to download them, which fails on a node with no internet."
+        )
+    for name in wanted:
+        link = cache_dir / name
+        if link.is_symlink() or link.exists():
+            continue
+        link.symlink_to(assets / name)
+    return cache_dir
 
 
 def predict(
@@ -202,6 +243,7 @@ def predict(
 
     out_dir = Path(out_dir)
     input_yaml = write_input_yaml(out_dir / f"{name}.yaml", sequences, ligand)
+    prepare_cache(cfg, Path(cfg.cache_dir))
     cmd = build_command(input_yaml, out_dir, cfg, gpu=gpu)
     if seed is not None:
         cmd += ["--seed", str(seed)]

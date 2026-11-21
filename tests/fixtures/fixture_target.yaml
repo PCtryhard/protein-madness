@@ -8,7 +8,7 @@
 name: fixture
 
 seeds:
-  - {id: fix, pdb: tests/fixtures/ideal.pdb, contigs: "20-20"}
+  - {id: fix, pdb: tests/fixtures/ideal.pdb, contig: "20-20"}
 
 ligand:
   id: 6NT

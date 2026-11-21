@@ -16,13 +16,21 @@ run:
   min_delta: 0.005             # smallest score gain that counts as improvement
   eval_replicates: 1           # Boltz-2 seeds averaged per design; range 1-5 (1)
 
-rfdiffusion:
-  run_inference: /path/to/RFdiffusion/scripts/run_inference.py
-  ckpt: Base_ckpt.pt
-  partial_T: 10                # re-noising timesteps; range 2-20 (10)
-  diffuser_T: 50               # full trajectory length; range 25-100 (50)
-  designs_per_parent: 4        # range 2-16 (4)
+rfd3:
+  # RFD3 is what the hackathon clusters have. Set these to the real paths
+  # before running; cluster/preflight.py checks them. config/pipeline.euler.yaml
+  # has the Euler values filled in.
+  binary: rfd3
+  checkpoint: /path/to/rfd3_latest.ckpt
+  n_batches: 4               # backbones per parent
+  diffusion_batch_size: 1
+  partial_T: 10                # the wiggle's re-noising depth
   extra_args: []
+
+# Only needed on a cluster that has RFdiffusion instead of RFD3. The two take
+# different inputs and only RFD3 can pin individual atoms, so they are not
+# interchangeable -- see src/stages/rfd3.py.
+rfdiffusion: null
 
 ligandmpnn:
   run_script: /path/to/LigandMPNN/run.py

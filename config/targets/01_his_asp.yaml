@@ -20,7 +20,7 @@ seeds:
   # id ends up in design ids, filenames and the scaffold column.
   - id: "01"
     pdb: data/01/inputs/crystal-motif/01_his_asp_.pdb
-    contigs: "20-40/A229-229/10-30/A291-291/20-40"   # UNVERIFIED, see build_targets.py
+    contig: "260-260"   # RFD3 total length; 260 is the limit
 
 ligand:
   id: 6NT
@@ -32,6 +32,9 @@ motif:
   fixed:                       # whole residues, never mutated, never redesigned
     - {chain: A, resnum: 229}   # ASP
     - {chain: A, resnum: 291}   # HIS
+  fixed_atoms:                 # atoms RFD3 pins, per residue
+    A229: "OD1,CG,OD2"   # ASP
+    A291: "CD2,CE1,NE2"   # HIS
 
 hbonds:
   - id: lig_n3_to_asp229_od2

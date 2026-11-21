@@ -114,6 +114,17 @@ ANGLE_SANE_MAX = 180.0
 # hydrogen bond, so it cannot fire on a merely poor seed.
 SEED_UNUSABLE_DISTANCE = 10.0
 
+# Which atoms RFD3 pins per motif residue: three per functional group, enough
+# to fix its position and orientation without holding the backbone. That is the
+# capability RFdiffusion lacks and RFD3 has, and the motif specs rely on it.
+RFD3_FIXED_ATOMS = {
+    "ASP": "OD1,CG,OD2",
+    "GLU": "OE1,CD,OE2",
+    "HIS": "CD2,CE1,NE2",
+    "ASN": "OD1,CG,ND2",
+    "GLN": "OE1,CD,NE2",
+}
+
 LIGAND_NAME = "6NT"
 LIGAND_RESNAME = "6NT"
 
@@ -155,7 +166,18 @@ def read_motif(pdb: Path) -> dict[int, str]:
     return residues
 
 
-def contigs_for(positions: list[int]) -> str:
+def contig_for(positions: list[int]) -> str:
+    """RFD3's contig: a total length range, not RFdiffusion segment specs.
+
+    260 is the competition limit, and what both the organisers' example and the
+    team's earlier runs used, so designs stay comparable. WHICH residues are
+    kept is said by unindex / select_fixed_atoms, which src/stages/rfd3.py
+    derives from motif.fixed and motif.fixed_atoms rather than from here.
+    """
+    return "260-260"
+
+
+def _rfdiffusion_contigs_unused(positions: list[int]) -> str:
     """An RFdiffusion motif-scaffolding contig string.
 
     Scaffold segments between and around the fixed motif residues. The ranges
@@ -408,7 +430,7 @@ def render(variant: str, label: str, pdb: Path, residues: dict[int, str],
         "  # id ends up in design ids, filenames and the scaffold column.",
         f'  - id: "{variant}"',
         f"    pdb: {pdb.relative_to(ROOT).as_posix()}",
-        f'    contigs: "{contigs_for(positions)}"   # UNVERIFIED, see build_targets.py',
+        f'    contig: "{contig_for(positions)}"   # RFD3 total length; 260 is the limit',
         "",
         "ligand:",
         f"  id: {LIGAND_NAME}",
@@ -421,6 +443,15 @@ def render(variant: str, label: str, pdb: Path, residues: dict[int, str],
     ]
     for position in positions:
         lines.append(f"    - {{chain: A, resnum: {position}}}   # {residues[position]}")
+
+    lines.append("  fixed_atoms:                 # atoms RFD3 pins, per residue")
+    for position in positions:
+        name = residues[position]
+        atoms = RFD3_FIXED_ATOMS.get(name)
+        if atoms:
+            lines.append(f'    A{position}: "{atoms}"   # {name}')
+        else:
+            lines.append(f"    # A{position} ({name}): no selection; pinned whole")
 
     lines += ["", "hbonds:"]
     for plan in plans:
