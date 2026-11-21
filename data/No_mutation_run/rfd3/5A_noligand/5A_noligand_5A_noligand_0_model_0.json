@@ -1,0 +1,84 @@
+{
+    "diffused_index_map": {
+        "A48": "A7",
+        "A225": "A120",
+        "A226": "A121",
+        "A229": "A72",
+        "A250": "A37",
+        "A252": "A39",
+        "A254": "A40",
+        "A256": "A18",
+        "A259": "A21",
+        "A261": "A23",
+        "A286": "A179",
+        "A287": "A180",
+        "A290": "A182",
+        "A291": "A183"
+    },
+    "metrics": {
+        "join_point_rmsd_by_token": {},
+        "insertion.mae": 0.48775489947625567,
+        "insertion.rmcd": 0.4104873974408422,
+        "insertion_rmsd": 0.39048862350838526,
+        "join_point_rmsd": NaN,
+        "n_conjoined_residues": 0,
+        "max_ca_deviation": 0.9479451179504395,
+        "n_chainbreaks": 1,
+        "n_clashing.interresidue_clashes_w_sidechain": 1,
+        "n_clashing.interresidue_clashes_w_backbone": 0,
+        "non_loop_fraction": 0.508130081300813,
+        "loop_fraction": 0.491869918699187,
+        "helix_fraction": 0.3821138211382114,
+        "sheet_fraction": 0.12601626016260162,
+        "num_ss_elements": 15,
+        "radius_of_gyration": 16.134260840389384,
+        "alanine_content": 0.3923076923076923,
+        "glycine_content": 0.12307692307692308,
+        "num_residues": 260,
+        "diffused_com": [
+            2.2932116985321045,
+            -0.4672994017601013,
+            -4.025512218475342
+        ],
+        "fixed_com": [
+            -0.0003599993942771107,
+            -0.0005206892965361476,
+            0.00043858890421688557
+        ]
+    },
+    "specification": {
+        "input": "/mnt/work/projects/hg317_pocket_seed/inputs/5fqj-6cf4761/5A_noligand.pdb",
+        "contig": "260-260",
+        "unindex": "A48,A225,A226,A229,A250,A252,A254,A256,A259,A261,A286,A287,A290,A291",
+        "extra": {
+            "example": "5A_noligand",
+            "task_name": "5A_noligand_5A_noligand",
+            "sampled_contig": "260P",
+            "num_tokens_in": 274,
+            "num_residues_in": 274,
+            "num_chains": 1,
+            "num_atoms": 1413,
+            "num_residues": 275,
+            "example_id": "5A_noligand_5A_noligand_0"
+        },
+        "select_fixed_atoms": {
+            "A48": "ALL",
+            "A225": "ALL",
+            "A226": "ALL",
+            "A229": "ALL",
+            "A250": "ALL",
+            "A252": "ALL",
+            "A254": "ALL",
+            "A256": "ALL",
+            "A259": "ALL",
+            "A261": "ALL",
+            "A286": "ALL",
+            "A287": "ALL",
+            "A290": "ALL",
+            "A291": "ALL"
+        },
+        "select_unfixed_sequence": false
+    },
+    "ckpt_path": "/mnt/ref/data_weights/rfd3/rfd3_latest.ckpt",
+    "seed": 1
+}
