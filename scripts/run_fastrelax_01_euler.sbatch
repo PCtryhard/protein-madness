@@ -55,7 +55,7 @@ def executable(var):
         raise SystemExit(f"Missing executable: {var}={path}")
     return str(path.absolute())
 
-cfg = yaml.safe_load(Path("config/pipeline.euler.yaml").read_text())
+cfg = yaml.safe_load(Path("config/pipeline.yaml").read_text())
 rfd3 = executable("PM_RFD3_BIN")
 help_result = subprocess.run([rfd3, "--help"], capture_output=True, text=True, check=True)
 if any(line.split()[:1] == ["design"] for line in help_result.stdout.splitlines()):
