@@ -71,6 +71,12 @@ class ScaffoldSearch:
             )
         self._update_best(candidates)
         self.frontier = self._select(candidates)
+        if self.run.max_cycles == 0:
+            # Seed-only. Checked here rather than in the runner's loop because
+            # the loop would otherwise run one full cycle before the stopping
+            # condition was ever consulted.
+            self.stopped = True
+            self.stop_reason = "max_cycles=0: seed-only run, no expansion"
 
     def advance(self, produced: list[Candidate]) -> list[Candidate]:
         """Fold a cycle's output into the frontier and return the new frontier.

@@ -1,0 +1,113 @@
+# THE FIRST RUN PROFILE: seed-only, 10 backbones x 8 sequences per variant.
+#
+#   python -m src.cli run --pipeline config/pipeline.small.yaml \
+#                         --target config/targets/01_his_asp.yaml --name small-01
+#
+# A complete pipeline config, not a patch. It differs from config/pipeline.yaml
+# in exactly four values, listed here so the diff is never a surprise:
+#
+#   run.max_cycles              12 -> 0     seed-only: no wiggle, no mutation
+#   run.patience                 2 -> 1     unused at max_cycles 0, kept valid
+#   rfdiffusion.designs_per_parent 4 -> 10  10 backbones
+#   ligandmpnn.sequences_per_backbone 4 -> 8  8 sequences each
+#
+# tests/test_config.py asserts this file has the same keys as the default, so a
+# new tunable cannot be added to one and forgotten in the other.
+#
+# WHAT IT COSTS, AND WHY SEED-ONLY FIRST
+#
+# 10 backbones x 8 sequences = 80 designs per variant, each one Boltz-2 call.
+# Measured inputs for the estimate: RUNLOG section 5 has RFD3 at ~45 s per
+# backbone, and PIPELINE.md plans for a few minutes per Boltz-2 call on a 250
+# token system giving order 50-100 designs/hour across both cards. These
+# variants are ~155 tokens, so folding should sit at the fast end.
+#
+#   per variant   ~8 min generation (10 backbones) + ~35-50 min folding
+#                 = roughly ONE HOUR
+#   all seven     roughly 6 hours
+#
+# So one variant is an hour; seven is not. Pick a couple to start:
+#
+#   bash cluster/aws/run_all.sh 01 02        # ~2 hours
+#
+# A full search is a different order of magnitude. With the default profile,
+# one cycle is 4x4x4 wiggle designs + 2x80 mutants = 224 Boltz calls, and
+# max_cycles is 12. Do not start that before a seed-only run has told you the
+# forward pass works end to end and the scores are not noise.
+
+run:
+  name: null
+  seed: 0
+  gpus: [0, 1]
+  max_cycles: 0                # SEED-ONLY. Score cycle 0, write a leaderboard, stop.
+  patience: 1                  # unused while max_cycles is 0; must stay >= 1
+  min_delta: 0.005
+  eval_replicates: 1           # raise to 3 if the noise control says to; see
+                               # scripts/noise_control.py
+
+rfdiffusion:
+  run_inference: /path/to/RFdiffusion/scripts/run_inference.py
+  ckpt: Base_ckpt.pt
+  partial_T: 10
+  diffuser_T: 50
+  designs_per_parent: 10       # 10 backbones per variant for cycle 0
+  extra_args: []
+
+ligandmpnn:
+  run_script: /path/to/LigandMPNN/run.py
+  checkpoint: ligandmpnn_v_32_010_25.pt
+  temperature: 0.1
+  sequences_per_backbone: 8    # 8 sequences per backbone -> 80 designs
+  omit_AA: "CX"
+  pack_side_chains: false
+
+boltz:
+  binary: boltz
+  cache_dir: ~/.boltz
+  recycling_steps: 3
+  diffusion_samples: 1
+  sampling_steps: 200
+  use_potentials: false
+  no_kernels: true
+  precision: "32"
+  max_tokens: 400
+
+protonation:
+  engine: pdbfixer
+  ph: 7.0
+
+scoring:
+  weights:
+    confidence: 0.70
+    geometry: 0.30
+  geometry_weights:
+    distance: 0.60
+    angle: 0.40
+  confidence:
+    metric: complex_ipde
+    ipde_best: 0.5
+    ipde_worst: 5.0
+  distance:
+    ideal: 2.9
+    tolerated: 3.5
+    fail: 4.5
+    clash: 2.2
+  angle:
+    tolerance: 60.0
+    rule: acceptor_side_always
+  aggregate: mean
+
+search:
+  # Both branches stay enabled so the config is valid and so this file can be
+  # used for a real search by raising max_cycles. At max_cycles 0 neither runs.
+  keep_per_cycle: 2
+  wiggle:
+    enabled: true
+    parents_per_cycle: 4
+    source: rfdiffusion_backbone
+  mutate:
+    enabled: true
+    parents_per_cycle: 2
+    shell_radius: 5.0
+    alphabet: "ADEFGHIKLMNQRSTVWY"
+    max_mutants_per_parent: 80

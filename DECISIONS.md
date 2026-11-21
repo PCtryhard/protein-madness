@@ -205,3 +205,64 @@ endings, with an error that does not mention line endings. The repo is edited on
 Windows, so without this every new script is born broken. The check is scoped to
 `cluster/`, `scripts/` and `env/` on purpose — `data/` holds an archived sbatch
 file that does have CRLF, and flagging it would train people to ignore the check.
+
+---
+
+**2026-11-21 — The noise control uses 5 seeds across several sequences, not 10 on one.**
+`scripts/noise_control.py --seeds 5 --sequences 3`.
+Why: the precision of an SD estimate goes as sigma/sqrt(2(n-1)) — about 35% at
+n=5 against 24% at n=10 — which argues for 10 only if you measure one sequence.
+The quantity that matters is the MEAN within-design SD over many designs, and
+averaging over m designs tightens it by sqrt(m). Five seeds on three sequences
+(15 calls) estimates the noise floor better than ten on one (10 calls), and it
+also shows whether the noise is sequence-dependent, which ten seeds on one
+sequence cannot. Five is also this project's existing convention: `RUNLOG.md` §4
+calls it "the five-seed rule" and `data/No_mutation_run/` holds exactly five
+seeds per design, so staying at five keeps the numbers comparable.
+
+**2026-11-21 — Measured from the existing 5-seed data: both angle terms are prediction noise.**
+`python scripts/noise_control.py --from-csv` over 32 designs x 5 seeds gives
+within/between ratios of 0.93 (base angle), 1.18 (donor angle), 0.79 (donor
+distance), 0.38 (base distance), 0.41 (iPDE).
+Why it matters: a ratio at or above 1 means Boltz-2's seed-to-seed variation on
+the same sequence is as large as the variation between genuinely different
+designs, so the term carries no information about design quality. The
+recommendation is `run.eval_replicates: 3` and `run.patience: 4` before any real
+search. `scoring.geometry_weights.angle: 0.40` is marked "fixed by spec" and has
+NOT been changed, but this data does not support it and that should be revisited
+with the user rather than silently. Caveat recorded in the tool's own output:
+this is the previous pipeline's run, whose ligand drift inflates the
+between-design spread, so the ratios are if anything optimistic.
+
+**2026-11-21 — `run.max_cycles: 0` means seed-only, and is the shape of the first real run.**
+`config/pipeline.small.yaml`: 10 backbones x 8 sequences, no expansion. Checked
+in `ScaffoldSearch.seed_frontier` rather than in the runner's loop, because the
+loop would otherwise run one whole cycle before the stopping condition was
+consulted.
+Why: 80 Boltz-2 calls per variant is about an hour and exercises the entire
+forward pass at scale, producing a leaderboard. A full search with the default
+profile is 224 calls per cycle for up to 12 cycles. Finding out that the forward
+pass works should not cost a day.
+
+**2026-11-21 — `build_targets.py` prefers ideals measured in the seed, and says per bond where each came from.**
+Three sources, printed as a table: `measured` (the seed's contact is a plausible
+H-bond, 2.2-3.5 A, so its own angle is the target), `crystal` (not plausible,
+but the acceptor exists unmutated in 5FQJ), `chemistry` (neither — hybridisation
+value, with a warning).
+Why: the refolded motif files are coming, and the whole update should be "drop
+them in, re-run one command". Preferring the seed is right because the seed's
+geometry is what RFdiffusion will be asked to reproduce. The plausibility window
+is bounded by `tolerated` rather than `fail` because a 3.9 A contact sits inside
+the fail gate and still scores zero, so its angle is not a target either. The
+script also flags a plausible distance with an implausible direction (an
+acceptor-side angle outside 90-180 deg), which is what a sidechain translated
+but not repacked looks like, and would otherwise install a nonsense target
+silently.
+
+**2026-11-21 — The newest `inputs/` subdirectory wins, by modification time.**
+`data/0N/inputs/<subdir>/`, chosen by mtime with the name as tiebreak, always
+printed; `--inputs NAME` overrides.
+Why: lexicographic order would prefer the shipped `5fqj-6cf4761` over a new
+`01_refold`, silently generating targets from the old clashing files. Mtime
+matches what anyone dropping a folder in means. Nothing is deleted, so the
+originals stay for comparison.

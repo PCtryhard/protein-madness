@@ -18,11 +18,42 @@ score stops improving.
 
 ```bash
 python -m src.cli smoke --target config/targets/01_his_asp.yaml   # validate, no GPU
-python -m pytest -q                                               # 257 tests, no GPU
+python -m pytest -q                                               # 269 tests, no GPU
 python cluster/preflight.py                                       # can this box run it?
+python scripts/noise_control.py --from-csv                        # is the score signal?
 ```
 
-To run it on a cluster, start at **[cluster/README.md](cluster/README.md)**.
+To run it on a cluster, start at **[cluster/README.md](cluster/README.md)**. When
+the refolded motif files arrive, **[HANDOFF.md](HANDOFF.md)** is the whole
+procedure.
+
+## The score is noisier than the search assumes
+
+`scripts/noise_control.py --from-csv` runs phase 0's noise control on the 32
+designs × 5 seeds already in `data/No_mutation_run/`. No GPU, no new compute.
+It says:
+
+| term | noise floor | signal | ratio | |
+| --- | --- | --- | --- | --- |
+| base distance | 3.54 Å | 9.21 Å | 0.38 | marginal |
+| donor distance | 4.16 Å | 5.30 Å | 0.79 | **mostly noise** |
+| base angle | 25.5° | 27.5° | 0.93 | **mostly noise** |
+| donor angle | 28.0° | 23.8° | 1.18 | **mostly noise** |
+| iPDE | 0.62 | 1.52 | 0.41 | marginal |
+
+"Noise floor" is the seed-to-seed spread for the *same* sequence; "signal" is
+the spread between *different* designs. A ratio near or above 1 means the term
+cannot tell designs apart at all — which is where both angle terms sit.
+
+So before a real search: `run.eval_replicates: 3` and `run.patience: 4`. And
+treat `scoring.geometry_weights.angle: 0.40` as suspect — the brief calls it
+fixed, so it has not been changed, but this data does not support it.
+
+Caveat, stated in the tool's own output: this is the *previous* pipeline's run,
+with the severe ligand drift that `RUNLOG.md` §1 records. That drift inflates
+the between-design spread, so these ratios are if anything optimistic. The
+absolute within-design spreads — ±4 Å, ±28° — are the numbers that matter, and
+they are large.
 
 > The previous pipeline — multi-backend scoring tiers, Euler/Modal, the
 > four-published-metrics scorer — now lives in **[outdated/](outdated/)** in
@@ -48,11 +79,11 @@ In detail:
 
 | Area | State |
 | --- | --- |
-| `src/config.py` — schema, cross-validation, strict keys | real, 32 tests |
+| `src/config.py` — schema, cross-validation, strict keys | real, 36 tests |
 | `src/tracking.py` — PDB/CIF readers, `.trb` map, resolver | real, 36 tests, checked against the variant-01 seed and a real Boltz-2 CIF |
 | `src/scoring/` — confidence, H-bond geometry, combination | real, 56 tests, values hand-derived in `tests/fixtures/build_fixtures.py` |
-| the seven variants — atom names, token budget, clash record | real, 29 tests in `tests/test_variants.py` |
-| `src/search/` — frontier, patience, both branches | real, 30 tests |
+| the seven variants + the generator's angle provenance | real, 34 tests in `tests/test_variants.py` |
+| `src/search/` — frontier, patience, both branches, seed-only | real, 33 tests |
 | `src/store.py` — lineage, leaderboard, cache | real, 35 tests |
 | `src/stages/` — command construction, token guard, output parsing | real, 39 tests; **no model has ever been invoked** |
 | `src/runner.py` — GPU pool and the per-scaffold loop | written, **not covered by tests and never run** |
@@ -61,6 +92,10 @@ In detail:
 | `cluster/euler/*`, `cluster/aws/*` | `bash -n` clean, `run_all.sh --dry-run` verified; **never submitted** |
 | `scripts/build_targets.py` | generates all 7 targets; a test asserts they are current |
 | `scripts/compare_no_mutation.py` | kept from the old pipeline, still runs against `data/No_mutation_run/` |
+| `scripts/noise_control.py --from-csv` | real, run; the verdict above is its output |
+| `scripts/noise_control.py` GPU mode | **refuses** — needs provenance maps read back from `designs.db`, not written |
+| `config/pipeline.small.yaml` | loads, cross-validates against all 7 targets, key-parity tested |
+| seed-only runs (`max_cycles: 0`) | logic tested; never run with models |
 | `protonation.engine: reduce` | **refuses** — see `src/stages/protonate.py` for why |
 | `src/cli.py resume` | **refuses** — the patience counter is not rebuilt from the database |
 
@@ -120,7 +155,16 @@ prints its distance, angle and normalised terms. An atom it cannot resolve
 raises rather than defaulting — which is the whole point, because a missing
 atom scored as zero distance looks like a perfect bond.
 
-**Run one search.** Needs both GPUs and all three model stacks:
+**First real run: seed-only, 10 backbones × 8 sequences.** Generates and
+scores cycle 0, writes a leaderboard, expands nothing. About an hour per
+variant:
+
+```powershell
+python -m src.cli run --pipeline config/pipeline.small.yaml --target config/targets/01_his_asp.yaml --name small-01
+```
+
+**A full search.** Needs both GPUs and all three model stacks, and is hours per
+variant rather than one:
 
 ```powershell
 python -m src.cli run --target config/targets/01_his_asp.yaml --name run1
@@ -262,6 +306,8 @@ through the ligand could ride its confidence term into the frontier.
 - **[cluster/README.md](cluster/README.md)** — how to run it on Euler or the
   AWS box, and the one constraint that decides which: all three tools must be
   on the same machine, because the loop cannot be split.
+- **[HANDOFF.md](HANDOFF.md)** — what to do when the refolded motif files
+  arrive. Three commands, and what the generator will tell you.
 - **[RUNLOG.md](RUNLOG.md)** — what was actually run and what it measured. The
   11.18 Å ligand-drift measurement in §1 is why this pipeline scores Boltz-2
   predictions rather than design-time geometry.

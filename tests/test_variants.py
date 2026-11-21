@@ -178,3 +178,130 @@ def test_generated_targets_are_up_to_date():
         + result.stdout
         + result.stderr
     )
+
+
+# --------------------------------------------------------------------------
+# the generator's ideal-angle provenance, and the refold handoff
+# --------------------------------------------------------------------------
+
+
+def _build_targets_module():
+    """Import scripts/build_targets.py as a module."""
+    import importlib.util
+
+    if "build_targets" in sys.modules:
+        return sys.modules["build_targets"]
+    path = ROOT / "scripts" / "build_targets.py"
+    spec = importlib.util.spec_from_file_location("build_targets", path)
+    module = importlib.util.module_from_spec(spec)
+    # Registered before exec because @dataclass resolves its own module out of
+    # sys.modules while the class body runs.
+    sys.modules["build_targets"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_plausible_window_is_the_scoring_window(pipeline):
+    """"Plausible" must mean "would score above zero", i.e. bounded by
+    `tolerated`, not by the looser `fail` gate. A 3.9 A contact sits inside the
+    4.5 A fail gate and still scores zero, so its angle is not a target."""
+    from src.scoring.hbond import distance_term
+
+    distance = pipeline.scoring.distance
+    assert distance_term(distance.tolerated, distance) == pytest.approx(0.0)
+    assert distance_term(distance.tolerated - 0.1, distance) > 0.0
+
+
+def test_generator_prefers_measured_when_the_seed_is_clean(tmp_path, pipeline):
+    """The refold handoff, in one test: a seed whose contacts are real H-bonds
+    yields `measured` ideals taken from that seed."""
+    module = _build_targets_module()
+    source = ROOT / "data" / "01" / "inputs" / "5fqj-6cf4761" / "01_his_asp_.pdb"
+    clean = tmp_path / "clean.pdb"
+    clean.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+
+    residues = module.read_motif(clean)
+    plans = module.plan_bonds(residues)
+    module.measure(plans, clean, pipeline.scoring.distance.clash,
+                   pipeline.scoring.distance.tolerated)
+
+    # Variant 01's two contacts are genuine crystal H-bonds, so both are
+    # measured and the ideal equals what was measured.
+    assert {p.source for p in plans} == {"measured"}
+    for plan in plans:
+        assert plan.ideal == pytest.approx(plan.measured_angle, abs=0.05)
+
+
+def test_generator_falls_back_and_says_so_when_the_seed_clashes(tmp_path, pipeline):
+    module = _build_targets_module()
+    source = ROOT / "data" / "05" / "inputs" / "5fqj-6cf4761" / "05_his_glu_his.pdb"
+    clashing = tmp_path / "clashing.pdb"
+    clashing.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+
+    residues = module.read_motif(clashing)
+    plans = module.plan_bonds(residues)
+    module.measure(plans, clashing, pipeline.scoring.distance.clash,
+                   pipeline.scoring.distance.tolerated)
+
+    by_id = {p.bond_id: p for p in plans}
+    # GLU229 clashes at 1.677 A: no crystal value for a GLU there, so chemistry.
+    glu = by_id["lig_n3_to_glu229_oe2"]
+    assert glu.source == "chemistry"
+    assert glu.note, "a fallback must explain itself"
+    # HIS291 is a real crystal contact and survives unmutated.
+    assert by_id["his291_ne2_to_lig_n1"].source == "measured"
+
+
+def test_generator_flags_a_plausible_distance_with_an_implausible_angle(
+    tmp_path, pipeline
+):
+    """A sidechain translated but not repacked gives a fine distance and a
+    nonsense direction. That must not install a nonsense ideal silently."""
+    import numpy as np
+
+    module = _build_targets_module()
+    source = ROOT / "data" / "01" / "inputs" / "5fqj-6cf4761" / "01_his_asp_.pdb"
+    lines = source.read_text(encoding="utf-8").splitlines()
+
+    def xyz(line):
+        return np.array([float(line[30:38]), float(line[38:46]), float(line[46:54])])
+
+    ligand = {
+        line[12:16].strip(): xyz(line)
+        for line in lines
+        if line.startswith("HETATM") and line[17:20].strip() == "6NT"
+    }
+    out = []
+    for line in lines:
+        if line.startswith("ATOM") and int(line[22:26]) == 229 \
+                and line[12:16].strip() == "OD2":
+            # Keep a good distance, wreck the direction: place OD2 along the
+            # N2->N3 bond axis, which drives the acceptor-side angle far down.
+            direction = ligand["N3"] - ligand["N2"]
+            target = ligand["N3"] + direction / np.linalg.norm(direction) * 2.85
+            line = line[:30] + f"{target[0]:8.3f}{target[1]:8.3f}{target[2]:8.3f}" \
+                   + line[54:]
+        out.append(line)
+    bad = tmp_path / "bad.pdb"
+    bad.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+    residues = module.read_motif(bad)
+    plans = module.plan_bonds(residues)
+    module.measure(plans, bad, pipeline.scoring.distance.clash,
+                   pipeline.scoring.distance.tolerated)
+
+    base = {p.bond_id: p for p in plans}["lig_n3_to_asp229_od2"]
+    assert base.source == "measured", "the distance is fine, so it is measured"
+    assert "SUSPICIOUS" in base.note, (
+        f"angle {base.measured_angle:.1f} deg at {base.distance:.3f} A should "
+        "have been flagged"
+    )
+
+
+def test_an_unknown_residue_type_is_a_hard_error(tmp_path, pipeline):
+    """A residue the chemistry table does not know must stop the script, not
+    be guessed at."""
+    module = _build_targets_module()
+    residues = {229: "ASP", 291: "TRP"}      # TRP is not a known donor here
+    with pytest.raises(SystemExit, match="chemistry table"):
+        module.plan_bonds(residues)

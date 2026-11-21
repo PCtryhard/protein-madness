@@ -34,7 +34,11 @@ class RunCfg(Strict):
     name: str | None = None
     seed: int = 0
     gpus: list[int] = [0, 1]
-    max_cycles: Annotated[int, Field(ge=1)] = 12
+    # 0 means seed-only: generate and score cycle 0, then stop without
+    # expanding either branch. That is the run you want first -- it exercises
+    # the whole forward pass at scale and gives a leaderboard, without
+    # committing to the several hours a full search takes.
+    max_cycles: Annotated[int, Field(ge=0)] = 12
     patience: Annotated[int, Field(ge=1)] = 2
     min_delta: Annotated[float, Field(gt=0.0)] = 0.005
     eval_replicates: Annotated[int, Field(ge=1)] = 1

@@ -356,3 +356,49 @@ def test_clash_must_be_below_ideal(pipeline_path):
     raw["scoring"]["distance"]["clash"] = 3.0
     with pytest.raises(ValidationError, match="clash < ideal < tolerated < fail"):
         PipelineCfg.model_validate(raw)
+
+
+# --------------------------------------------------------------------------
+# the small-run profile
+# --------------------------------------------------------------------------
+
+
+SMALL = "config/pipeline.small.yaml"
+
+
+def test_small_profile_loads():
+    cfg = load_pipeline(ROOT / SMALL)
+    assert cfg.run.max_cycles == 0, "the small profile is meant to be seed-only"
+    assert cfg.rfdiffusion.designs_per_parent == 10
+    assert cfg.ligandmpnn.sequences_per_backbone == 8
+
+
+def test_small_profile_cross_validates(pipeline_path):
+    for target in all_shipped_targets():
+        load(ROOT / SMALL, ROOT / target)
+
+
+def test_small_profile_has_the_same_keys_as_the_default(pipeline_path):
+    """A new tunable must not be added to one config and forgotten in the
+    other. Compared as key trees, not values -- the values differ on purpose."""
+    def keys(node, prefix=""):
+        out = set()
+        if isinstance(node, dict):
+            for k, v in node.items():
+                out.add(f"{prefix}{k}")
+                out |= keys(v, f"{prefix}{k}.")
+        return out
+
+    default = keys(yaml.safe_load(pipeline_path.read_text(encoding="utf-8")))
+    small = keys(yaml.safe_load((ROOT / SMALL).read_text(encoding="utf-8")))
+    assert default == small, (
+        f"only in pipeline.yaml: {sorted(default - small)}\n"
+        f"only in pipeline.small.yaml: {sorted(small - default)}"
+    )
+
+
+def test_seed_only_profile_still_declares_both_branches(pipeline_path):
+    """So the same file can drive a real search by raising max_cycles."""
+    cfg = load_pipeline(ROOT / SMALL)
+    assert cfg.search.wiggle.enabled
+    assert cfg.search.mutate.enabled

@@ -342,3 +342,38 @@ def test_shell_without_a_ligand_raises(pipeline):
     provenance = Provenance(design_id="d", scaffold_id="s")
     with pytest.raises(MutationError, match="no ligand atoms"):
         shell_positions(structure, provenance, motif, pipeline.search.mutate, "A")
+
+
+# --------------------------------------------------------------------------
+# seed-only runs
+# --------------------------------------------------------------------------
+
+
+def test_max_cycles_zero_stops_after_seeding():
+    """The first run you want: score cycle 0, get a leaderboard, expand
+    nothing. The runner's loop would otherwise run one whole cycle before the
+    stopping condition was consulted."""
+    s = make_search(run={"max_cycles": 0})
+    s.seed_frontier([candidate("a", 0.4), candidate("b", 0.6)])
+    assert s.stopped
+    assert "seed-only" in s.stop_reason
+    assert s.cycle == 0
+    # the frontier is still built, so the leaderboard and report work
+    assert [c.design_id for c in s.frontier] == ["b", "a"]
+    assert s.best_score == pytest.approx(0.6)
+
+
+def test_seed_only_refuses_to_advance():
+    s = make_search(run={"max_cycles": 0})
+    s.seed_frontier([candidate("a", 0.4)])
+    with pytest.raises(RuntimeError, match="has stopped"):
+        s.advance([candidate("b", 0.9, cycle=1)])
+
+
+def test_max_cycles_one_still_runs_a_cycle():
+    s = make_search(run={"max_cycles": 1, "patience": 99})
+    s.seed_frontier([candidate("a", 0.4)])
+    assert not s.stopped
+    s.advance([candidate("b", 0.9, cycle=1)])
+    assert s.stopped
+    assert "max_cycles=1" in s.stop_reason
