@@ -6,13 +6,14 @@ from tempfile import TemporaryDirectory
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("cif", type=Path, help="full protein–6NT mmCIF")
     parser.add_argument("--params", required=True, type=Path, help="Rosetta 6NT.params")
     parser.add_argument("--out", required=True, type=Path, help="output motif PDB")
     parser.add_argument("--chain", default="A", help="protein chain in the CIF")
-    parser.add_argument("--asp", type=int, default=203, help="Asp residue ID in the CIF")
-    parser.add_argument("--his", type=int, default=263, help="His residue ID in the CIF")
+    parser.add_argument("--asp", type=int, default=202, help="Asp residue ID in the CIF")
+    parser.add_argument("--his", type=int, default=262, help="His residue ID in the CIF")
     args = parser.parse_args()
     for path in (args.cif, args.params):
         if not path.is_file():
