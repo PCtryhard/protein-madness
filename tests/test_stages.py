@@ -14,7 +14,7 @@ import pytest
 import yaml
 
 from src.config import Ligand, MotifCfg, ResidueRef
-from src.stages import boltz, ligandmpnn, protonate, rfdiffusion
+from src.stages import boltz, ligandmpnn, protonate, rfd3
 from src.stages.base import StageError, run_command
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -208,38 +208,6 @@ def test_rfd3_fresh_scaffolding_omits_partial_T(pipeline, tmp_path):
     )
     assert "partial_T" not in " ".join(cmd)
 
-
-def test_missing_input_pdb_raises(pipeline, tmp_path):
-    with pytest.raises(StageError, match="input PDB not found"):
-        rfdiffusion.run(
-            pipeline.rfdiffusion, tmp_path / "nope.pdb", "260-260", tmp_path / "out"
-        )
-
-
-def test_a_pdb_without_its_trb_is_refused(tmp_path):
-    """Inferring the mapping from the structure is exactly the proximity-based
-    guess the rules forbid."""
-    (tmp_path / "rfd_0.pdb").write_text("ATOM\n", encoding="utf-8")
-    with pytest.raises(StageError, match="no.*trb"):
-        rfdiffusion.collect_outputs(tmp_path / "rfd", expected=1)
-
-
-def test_collect_outputs_pairs_pdb_with_trb(tmp_path):
-    (tmp_path / "rfd_0.pdb").write_text("ATOM\n", encoding="utf-8")
-    (tmp_path / "rfd_0.trb").write_bytes(b"\x80\x04}.")
-    outputs = rfdiffusion.collect_outputs(tmp_path / "rfd", expected=2)
-    assert len(outputs) == 1
-    assert outputs[0].index == 0
-
-
-def test_no_outputs_at_all_raises(tmp_path):
-    with pytest.raises(StageError, match="produced no PDBs"):
-        rfdiffusion.collect_outputs(tmp_path / "rfd", expected=2)
-
-
-# --------------------------------------------------------------------------
-# LigandMPNN
-# --------------------------------------------------------------------------
 
 
 def test_fixed_residues_are_passed_in_backbone_numbering():

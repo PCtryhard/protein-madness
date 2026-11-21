@@ -86,3 +86,22 @@ three assumptions turned out wrong:
 - **[../data/](../data/)** — the 5FQJ seeds and the no-mutation baseline run.
   Inputs and results, not pipeline. The new `config/targets/5fqj.yaml` reads
   its geometry from `../data/5A_5FQJ.pdb`.
+
+---
+
+## Layer 3: the extra pipeline configs (superseded 21 Nov 2026)
+
+`config/` briefly held four `pipeline*.yaml` profiles. Three of them had
+`/path/to/` placeholders and had never run anywhere, so they were four places
+for the same settings to drift apart.
+
+| Here | Why it went |
+|---|---|
+| `config/pipeline.template.yaml` | the original default, placeholder tool paths |
+| `config/pipeline.small.yaml` | seed-only, 10 backbones x 8 sequences; the one live config covers this by setting `run.max_cycles: 0` |
+| `config/pipeline.first.yaml` | 5 x 3 x 2 x 2, one cycle; those are now the live config's values |
+| `src/stages/rfdiffusion.py` | the clusters have RFD3, not RFdiffusion. Kept because it is a correct wrapper for a cluster that has the other tool, and because the two are genuinely different: RFdiffusion takes a contig string and holds whole residues, RFD3 takes a JSON spec and can pin individual atoms |
+
+There is now one `config/pipeline.yaml`. Its paths use `${HOME}` and
+`${SCRATCH}` so it works for any teammate on Euler once they have run the three
+setup scripts in `cluster/euler/`.

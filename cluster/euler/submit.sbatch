@@ -43,7 +43,7 @@ RUN_PREFIX="${PM_RUN_PREFIX:-euler}"
 # Seed-only by default, same reasoning as cluster/aws/run_all.sh. Submit with
 #   sbatch --export=ALL,PM_PIPELINE=config/pipeline.yaml cluster/euler/submit.sbatch
 # for a full search.
-PIPELINE="${PM_PIPELINE:-config/pipeline.small.yaml}"
+PIPELINE="${PM_PIPELINE:-config/pipeline.yaml}"
 
 cd "$REPO_DIR"
 

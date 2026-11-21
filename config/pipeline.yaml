@@ -1,101 +1,138 @@
-# Every tunable in the pipeline. Single source of truth.
+# THE pipeline config. There is one, deliberately.
 #
-# A numeric literal inside a scoring function or a stage wrapper is a bug.
-# The review for each build phase greps for one. If you need a new number,
-# add it here with a comment giving its range and a centre value.
+#   python -m src.cli run --target config/targets/01_his_asp.yaml --name euler-01
 #
-# Target-specific things (seeds, motif, H-bonds, ligand) are NOT here:
-# they live in config/targets/<name>.yaml. Keep it that way.
+# Set up for ETH Euler, driving RFD3 / LigandMPNN / Boltz-2 directly. The
+# paths use ${HOME} and ${SCRATCH}, so it works for any teammate on Euler
+# once they have run the setup scripts in cluster/euler/.
+#
+# For a different cluster, change the four tool paths (rfd3.binary,
+# rfd3.checkpoint, ligandmpnn.*, boltz.*) and run cluster/preflight.py,
+# which checks them before you spend an allocation.
+#
+# Three earlier profiles -- a placeholder template, a seed-only one and a
+# first-run one -- are in outdated/config/. They had /path/to/ placeholders
+# and never ran anywhere, so keeping four configs where one works was just
+# four places to get out of step.
+#
+# This is OUR runner calling the stock tools. Nothing here goes through the
+# organisers' template, their prepare_*/verify_* helpers, or their validation
+# layer, and there is no MMseqs2 step -- we submit single-sequence to Boltz and
+# do the scoring ourselves.
+#
+# Paths use ${HOME} and ${SCRATCH} so this file works for ANY teammate on
+# Euler, not just whoever wrote it. Run the three setup scripts in
+# cluster/euler/ to create the same layout under your own account:
+#
+#   bash cluster/euler/setup_rfd3.sh      # rfd3 env (needs the relayed code)
+#   bash cluster/euler/setup_ligandmpnn.sh
+#   bash cluster/euler/setup_boltz.sh
+#
+# $SCRATCH is purged after ~2 weeks, so if a run fails on a missing
+# checkpoint, that is why.
+#
+# SIZE OF THE RUN
+#   cycle 0    5 backbones x 3 sequences              = 15 designs
+#   cycle 1    wiggle 2 parents x 2 x 3 = 12,
+#              mutate 2 parents x 2     =  4          = 16
+#   total                                               31 Boltz-2 calls
 
 run:
-  name: null                   # set per run, on the command line
-  seed: 0
-  gpus: [0, 1]
-  max_cycles: 12               # range 5-30 (12)
-  patience: 2                  # cycles without improvement before a scaffold stops
-  min_delta: 0.005             # smallest score gain that counts as improvement
-  eval_replicates: 1           # Boltz-2 seeds averaged per design; range 1-5 (1)
+  name: null
+  seed: 1
+  # One GPU per Euler job. Asking for two would queue for a node that has two
+  # free and gains nothing: Boltz on a ~270-token system fits one card.
+  gpus: [0]
+  max_cycles: 1
+  patience: 2
+  min_delta: 0.005
+  eval_replicates: 1
 
 rfd3:
-  # RFD3 is what the hackathon clusters have. Set these to the real paths
-  # before running; cluster/preflight.py checks them. config/pipeline.euler.yaml
-  # has the Euler values filled in.
-  binary: rfd3
-  checkpoint: /path/to/rfd3_latest.ckpt
-  n_batches: 4               # backbones per parent
+  binary: ${HOME}/pm-rfd3-env/bin/rfd3
+  checkpoint: ${SCRATCH}/pdh/weights/rfd3/rfd3_latest.ckpt
+  n_batches: 5                 # 5 backbones at cycle 0
   diffusion_batch_size: 1
   partial_T: 10                # the wiggle's re-noising depth
   extra_args: []
 
-# Only needed on a cluster that has RFdiffusion instead of RFD3. The two take
-# different inputs and only RFD3 can pin individual atoms, so they are not
-# interchangeable -- see src/stages/rfd3.py.
+# Not used on this cluster; kept null so the schema is explicit about it.
 rfdiffusion: null
 
 ligandmpnn:
-  run_script: /path/to/LigandMPNN/run.py
-  checkpoint: ligandmpnn_v_32_010_25.pt
-  temperature: 0.1             # range 0.05-0.3 (0.1)
-  sequences_per_backbone: 4    # range 1-8 (4)
+  run_script: ${SCRATCH}/pdh/tools/LigandMPNN/run.py
+  # LigandMPNN gets its OWN interpreter, and it has to. Its official
+  # requirements.txt pins numpy==1.23.5 and torch==2.2.1, and its vendored
+  # openfold uses np.int, which numpy 2 removed. pm-rfd3-env has numpy 2.5.4
+  # because RFD3 needs it. The two stacks cannot share an environment -- which
+  # is why the AWS cluster ships three separate ones, and why the upstream
+  # README says to make a dedicated env on Python 3.11.
+  python: ${HOME}/pm-mpnn-env/bin/python
+  checkpoint: ${SCRATCH}/pdh/tools/ligandmpnn/ligandmpnn_v_32_010_25.pt
+  temperature: 0.1
+  sequences_per_backbone: 3
   omit_AA: "CX"
   pack_side_chains: false
+  use_atom_context: true
+  use_side_chain_context: true
 
 boltz:
-  binary: boltz
-  cache_dir: ~/.boltz
-  recycling_steps: 3           # range 1-5 (3); cut second on OOM
-  diffusion_samples: 1         # range 1-5 (1); cut first on OOM
-  sampling_steps: 200          # range 50-200 (200)
+  binary: ${HOME}/pm-boltz-env/bin/boltz
+  cache_dir: ${SCRATCH}/pdh/boltz-cache
+  # The weights are staged read-only; the wrapper symlinks them into cache_dir
+  # rather than letting Boltz download 6 GB on a node with no internet.
+  assets_dir: ${SCRATCH}/pdh/cache
+  recycling_steps: 3
+  diffusion_samples: 1
+  sampling_steps: 200
   use_potentials: false
-  no_kernels: true             # expected on sm_75; confirm in phase 0
-  precision: "32"              # bf16 unsupported on Turing; confirm in phase 0
-  max_tokens: 400              # refuse to submit beyond this
+  # MEASURED, not assumed: job 21870275 landed on a TITAN RTX, compute
+  # capability 7.5. Euler's GPU partition also has A100s and 4090s, but the
+  # scheduler gives you whatever is free, so the config has to be correct for
+  # the oldest card it might land on. Turing predates Ampere, so the optimised
+  # Boltz kernels are out and bf16 is unavailable -- which is exactly what
+  # these two settings already said.
+  no_kernels: true
+  precision: "32"              # no bf16 on sm_75; see the note above
+  max_tokens: 400
+  accelerator: gpu
+  devices: 1
 
 protonation:
-  engine: pdbfixer             # pdbfixer | reduce | none
+  engine: pdbfixer
   ph: 7.0
 
 scoring:
   weights:
-    confidence: 0.70           # range 0.5-0.9 (0.7)
+    confidence: 0.70
     geometry: 0.30
   geometry_weights:
-    distance: 0.60             # fixed by spec
-    angle: 0.40                # fixed by spec
+    distance: 0.60
+    angle: 0.40
   confidence:
-    metric: complex_ipde       # complex_ipde | iptm | ligand_iptm | motif_pae
-    ipde_best: 0.5             # angstrom, maps to 1.0
-    ipde_worst: 5.0            # angstrom, maps to 0.0
+    metric: complex_ipde
+    ipde_best: 0.5
+    ipde_worst: 5.0
   distance:
-    ideal: 2.9                 # angstrom, heavy-atom donor to acceptor; range 2.7-3.0
-    tolerated: 3.5             # angstrom, maps to 0.0; range 3.2-3.6 (3.5)
-    fail: 4.5                  # angstrom, any required bond beyond this zeroes the design
-    clash: 2.2                 # angstrom, any required bond BELOW this zeroes it too.
-                               # The distance term is symmetric, so without this a
-                               # 1.7 A contact driven through the ligand scores the
-                               # same as a 4.0 A one but is not gated. Range 1.8-2.4.
+    ideal: 2.9
+    tolerated: 3.5
+    fail: 4.5
+    clash: 2.2
   angle:
-    tolerance: 60.0            # degrees of deviation mapped to 0.0; range 30-70 (60)
-    # split_by_donor_type: the recommended rule. Fixed-H donors are measured
-    # D-H...A against 180 deg and need the protonation stage; rotatable-H donors
-    # are measured D_ant-D...A at the acceptor and do not.
-    # acceptor_side_always: the conservative rule. Every bond is measured at the
-    # acceptor, no hydrogens are needed anywhere, and the protonation stage is
-    # skipped. See PIPELINE.md, "Hydrogens and the 180 degree criterion".
-    rule: acceptor_side_always   # split_by_donor_type | acceptor_side_always
-  aggregate: mean              # mean | min across the named bonds
+    tolerance: 60.0
+    rule: acceptor_side_always
+  aggregate: mean
 
 search:
-  keep_per_cycle: 2            # frontier size per scaffold; range 1-5 (2)
+  keep_per_cycle: 2
   wiggle:
     enabled: true
-    parents_per_cycle: 4       # range 1-8 (4)
+    parents_per_cycle: 2
     source: rfdiffusion_backbone
-    designs_per_parent: null   # null = use rfdiffusion.designs_per_parent.
-                               # Set it to decouple wiggle breadth from cycle 0's.   # rfdiffusion_backbone | boltz_prediction
+    designs_per_parent: 2
   mutate:
     enabled: true
-    parents_per_cycle: 2       # range 1-4 (2)
-    shell_radius: 5.0          # angstrom from ligand; range 4-8 (5)
+    parents_per_cycle: 2
+    shell_radius: 5.0
     alphabet: "ADEFGHIKLMNQRSTVWY"
-    max_mutants_per_parent: 80 # range 20-250 (80)
+    max_mutants_per_parent: 2

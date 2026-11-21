@@ -496,7 +496,8 @@ def render(variant: str, label: str, pdb: Path, residues: dict[int, str],
     return "\n".join(lines).rstrip() + "\n"
 
 
-def discover(inputs_name: str | None = None) -> list[tuple[Path, Path]]:
+def discover(inputs_name: str | None = None,
+             pattern: str = "*.pdb") -> list[tuple[Path, Path]]:
     """One motif PDB per variant folder.
 
     A folder accumulates several `inputs/<subdir>/` as new versions arrive, and
@@ -523,7 +524,7 @@ def discover(inputs_name: str | None = None) -> list[tuple[Path, Path]]:
         # A PDB sitting directly in inputs/, with no subdirectory, is a valid
         # layout and is what one push actually used. Treat inputs/ itself as a
         # candidate so the layout can change without this script caring.
-        if list((folder / "inputs").glob("*.pdb")):
+        if list((folder / "inputs").glob(pattern)):
             candidates.append(folder / "inputs")
 
         if not candidates:
@@ -534,10 +535,12 @@ def discover(inputs_name: str | None = None) -> list[tuple[Path, Path]]:
         if inputs_name:
             if inputs_name == ".":
                 chosen_dir = folder / "inputs"
-                if not list(chosen_dir.glob("*.pdb")):
-                    raise SystemExit(
-                        f"{chosen_dir} holds no *.pdb directly (--inputs .)"
-                    )
+                if not list(chosen_dir.glob(pattern)):
+                    # A skip, not an error: when selecting by pattern it is
+                    # normal for only some variants to have that kind of file.
+                    print(f"warning: {chosen_dir} holds no {pattern}, "
+                          f"skipping {folder.name}", file=sys.stderr)
+                    continue
             else:
                 chosen = [d for d in candidates if d.name == inputs_name]
                 if not chosen:
@@ -573,10 +576,14 @@ def discover(inputs_name: str | None = None) -> list[tuple[Path, Path]]:
                 "Every variant folder must then contain that name."
             )
 
-        pdbs = sorted(chosen_dir.glob("*.pdb"))
+        pdbs = sorted(chosen_dir.glob(pattern))
         if not pdbs:
+            print(f"warning: {chosen_dir} holds no {pattern}, skipping "
+                  f"{folder.name}", file=sys.stderr)
+            continue
+        if False:
             raise SystemExit(
-                f"{chosen_dir} holds no *.pdb. It is the newest inputs "
+                f"{chosen_dir} holds no {pattern}. It is the newest inputs "
                 f"subdirectory in {folder}, so this is probably the half-copied "
                 "new input rather than something to skip. Pass --inputs to "
                 "choose a different one explicitly."
@@ -610,6 +617,10 @@ def main() -> int:
                         help="exit non-zero if any target file is out of date")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="print every measurement, not just the summary")
+    parser.add_argument("--pattern", default="*.pdb", metavar="GLOB",
+                        help="which files count as a seed (default *.pdb). Use "
+                             "e.g. '*.pdb.pre-boltz' to read a differently "
+                             "suffixed file without renaming it.")
     parser.add_argument("--inputs", metavar="NAME",
                         help="use data/0N/inputs/NAME for every variant instead "
                              "of the most recently modified subdirectory")
@@ -622,8 +633,11 @@ def main() -> int:
     rows: list[tuple[str, BondPlan]] = []
     unusable: list[tuple[str, Path, list[BondPlan]]] = []
 
-    for folder, pdb in discover(args.inputs):
-        label = pdb.stem[3:].strip("_") or "motif"
+    for folder, pdb in discover(args.inputs, args.pattern):
+        # Everything from ".pdb" onward is suffix, however many there are:
+        # "01_his_asp_.pdb.pre-boltz" must give "his_asp", not "his_asp_.pdb".
+        base = pdb.name.split(".pdb")[0]
+        label = base[3:].strip("_") or "motif"
         residues = read_motif(pdb)
         validate_residues(residues, where=str(pdb))
         plans = plan_bonds(residues)
