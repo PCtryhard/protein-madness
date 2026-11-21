@@ -25,10 +25,24 @@ TARGETS_DIR = ROOT / "config" / "targets"
 # sits 25 A from the motif. Variant 04 kept the crystal base contact, so the
 # geometry assertions moved there. If 04 is ever refolded too, move this and
 # re-measure rather than loosening the assertions.
-REAL_TARGET = "config/targets/04_gln_asp_his.yaml"
-REAL_SEED = (
-    ROOT / "data" / "04" / "inputs" / "5fqj-6cf4761" / "04_gln_asp_his.pdb"
-)
+REAL_TARGET = "config/targets/01_his_asp.yaml"
+
+
+def seed_for(target_rel: str) -> Path:
+    """The seed PDB a target file actually points at.
+
+    Read out of the target rather than hard-coded, because the input layout has
+    now moved twice -- from inputs/5fqj-6cf4761/ to a flat inputs/ to
+    inputs/crystal-motif/ -- and each time the hard-coded paths went quietly to
+    SKIPPED or FileNotFoundError instead of failing usefully.
+    """
+    import yaml
+
+    raw = yaml.safe_load((ROOT / target_rel).read_text(encoding="utf-8"))
+    return ROOT / raw["seeds"][0]["pdb"]
+
+
+REAL_SEED = seed_for(REAL_TARGET)
 
 EXAMPLE_TARGET = "config/targets/example_target.yaml"
 

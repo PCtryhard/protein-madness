@@ -22,7 +22,7 @@ seeds:
   # The id is quoted because YAML reads a bare 01 as the integer 1, and the
   # id ends up in design ids, filenames and the scaffold column.
   - id: "04"
-    pdb: data/04/inputs/5fqj-6cf4761/04_gln_asp_his.pdb
+    pdb: data/04/inputs/crystal-motif/04_gln_asp_his.pdb
     contigs: "20-40/A229-229/10-30/A261-261/10-30/A291-291/20-40"   # UNVERIFIED, see build_targets.py
 
 ligand:

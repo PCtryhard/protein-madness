@@ -203,6 +203,12 @@ class WiggleCfg(Strict):
     enabled: bool = True
     parents_per_cycle: Annotated[int, Field(ge=1)] = 4
     source: Literal["rfdiffusion_backbone", "boltz_prediction"] = "rfdiffusion_backbone"
+    # How many re-noised backbones to make from each parent. null means "use
+    # rfdiffusion.designs_per_parent", which is what cycle 0 uses. They are
+    # separate because the two jobs are different sizes: cycle 0 wants breadth
+    # from one seed, while a wiggle wants a few neighbours of something already
+    # good, and tying them together forces one number to serve both.
+    designs_per_parent: Annotated[int, Field(ge=1)] | None = None
 
 
 class MutateCfg(Strict):

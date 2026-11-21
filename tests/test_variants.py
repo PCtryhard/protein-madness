@@ -23,7 +23,7 @@ from src.scoring.combine import combine
 from src.scoring.hbond import measure_all
 from src.stages.boltz import ligand_atom_count
 from src.tracking import identity_provenance, read_structure
-from tests.paths import ROOT, variant_targets
+from tests.paths import ROOT, seed_for, variant_targets
 
 
 def _load_variant(pipeline_path, target_rel: str):
@@ -251,8 +251,9 @@ def test_generator_prefers_measured_when_the_seed_is_clean(tmp_path, pipeline):
     """The refold handoff, in one test: a seed whose contacts are real H-bonds
     yields `measured` ideals taken from that seed."""
     module = _build_targets_module()
-    source = (ROOT / "data" / "04" / "inputs" / "5fqj-6cf4761"
-              / "04_gln_asp_his.pdb")
+    source = seed_for("config/targets/04_"
+                       + [t for t in variant_targets()
+                          if "/04_" in t][0].split("/04_")[1])
     clean = tmp_path / "clean.pdb"
     clean.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
 
@@ -271,7 +272,9 @@ def test_generator_prefers_measured_when_the_seed_is_clean(tmp_path, pipeline):
 
 def test_generator_falls_back_and_says_so_when_the_seed_clashes(tmp_path, pipeline):
     module = _build_targets_module()
-    source = ROOT / "data" / "05" / "inputs" / "5fqj-6cf4761" / "05_his_glu_his.pdb"
+    source = seed_for("config/targets/05_"
+                       + [t for t in variant_targets()
+                          if "/05_" in t][0].split("/05_")[1])
     clashing = tmp_path / "clashing.pdb"
     clashing.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
 
@@ -297,8 +300,9 @@ def test_generator_flags_a_plausible_distance_with_an_implausible_angle(
     import numpy as np
 
     module = _build_targets_module()
-    source = (ROOT / "data" / "04" / "inputs" / "5fqj-6cf4761"
-              / "04_gln_asp_his.pdb")
+    source = seed_for("config/targets/04_"
+                       + [t for t in variant_targets()
+                          if "/04_" in t][0].split("/04_")[1])
     lines = source.read_text(encoding="utf-8").splitlines()
 
     def xyz(line):
@@ -357,7 +361,9 @@ def test_a_seed_whose_ligand_is_far_away_is_refused(tmp_path, pipeline):
     import numpy as np
 
     module = _build_targets_module()
-    source = ROOT / "data" / "04" / "inputs" / "5fqj-6cf4761" / "04_gln_asp_his.pdb"
+    source = seed_for("config/targets/04_"
+                       + [t for t in variant_targets()
+                          if "/04_" in t][0].split("/04_")[1])
     lines = source.read_text(encoding="utf-8").splitlines()
     out = []
     for line in lines:
@@ -384,7 +390,9 @@ def test_a_merely_bad_seed_is_not_refused(tmp_path, pipeline):
     """The distinction that matters: a 1.7 A clash or a 3.9 A stretch is a bad
     contact RFdiffusion can be asked to improve, and it still generates."""
     module = _build_targets_module()
-    source = ROOT / "data" / "05" / "inputs" / "5fqj-6cf4761" / "05_his_glu_his.pdb"
+    source = seed_for("config/targets/05_"
+                       + [t for t in variant_targets()
+                          if "/05_" in t][0].split("/05_")[1])
     residues = module.read_motif(source)
     plans = module.plan_bonds(residues)
     module.measure(plans, source, pipeline.scoring.distance.clash,

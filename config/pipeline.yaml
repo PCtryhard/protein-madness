@@ -82,7 +82,9 @@ search:
   wiggle:
     enabled: true
     parents_per_cycle: 4       # range 1-8 (4)
-    source: rfdiffusion_backbone   # rfdiffusion_backbone | boltz_prediction
+    source: rfdiffusion_backbone
+    designs_per_parent: null   # null = use rfdiffusion.designs_per_parent.
+                               # Set it to decouple wiggle breadth from cycle 0's.   # rfdiffusion_backbone | boltz_prediction
   mutate:
     enabled: true
     parents_per_cycle: 2       # range 1-4 (2)

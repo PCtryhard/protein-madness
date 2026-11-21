@@ -105,6 +105,8 @@ search:
     enabled: true
     parents_per_cycle: 4
     source: rfdiffusion_backbone
+    designs_per_parent: null   # null = use rfdiffusion.designs_per_parent.
+                               # Set it to decouple wiggle breadth from cycle 0's.
   mutate:
     enabled: true
     parents_per_cycle: 2
