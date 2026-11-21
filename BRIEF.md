@@ -3,7 +3,7 @@
 Status: **draft for team discussion.** On `main` so everyone can read it;
 **not yet agreed.** Argue with it, then edit it — §14 is the agenda.
 
-This supersedes the "unknown target" assumptions in `PLAN.md` and `README.md`.
+This supersedes the "unknown target" assumptions in `outdated/PLAN.md` and `README.md`.
 The challenge is announced, the compute is not what we planned for, and the
 scoring function is *published*. All three change what we should do today.
 
@@ -136,7 +136,7 @@ cheaper version of the measurement, it is a different measurement.
 
 ## 2. The binding constraint: we have two GPUs
 
-This is the thing that invalidates most of `PLAN.md`. There is no Euler
+This is the thing that invalidates most of `outdated/PLAN.md`. There is no Euler
 allocation for this, no Modal, no Tamarind, no $30 of A100s. From the cluster
 guide:
 
@@ -805,8 +805,8 @@ Setup that now exists on Euler, ready to use:
 
 Other facts settled while surveying:
 
-- **`TODO.md` B6 is resolved**: the account is `es_workshop`.
-- **`TODO.md` B4 is resolved**: the GRES suffix is an upper/lower-case `G` —
+- **`outdated/TODO.md` B6 is resolved**: the account is `es_workshop`.
+- **`outdated/TODO.md` B4 is resolved**: the GRES suffix is an upper/lower-case `G` —
   the nodes advertise `gpumem:no_consume:11G`, so `--gres=gpumem:11g` parses.
   To reach bigger cards *outside* the reservation, raise that number.
 - **The login node reaches PyPI** (HTTP 200), so `pip install boltz` and weight
@@ -978,7 +978,7 @@ width: more RFD3 backbones, one-shot LigandMPNN, selection without evolution.
 jobs, the driver resubmitting generations without a human. Sleep in shifts, two
 awake at a time.
 
-**GATE 8 — HARD FREEZE ON NEW GENERATIONS, Sunday ~12:00.** From `PLAN.md`, and
+**GATE 8 — HARD FREEZE ON NEW GENERATIONS, Sunday ~12:00.** From `outdated/PLAN.md`, and
 it holds harder now: five seeds per elite means the confirmation backlog is
 longer than a one-shot pipeline's. After the freeze: drain the queue, finalise
 the leaderboard, build the submission, rehearse. A design born at 14:00 cannot
@@ -1012,8 +1012,8 @@ Dependencies run top to bottom. Items 1–3 unblock everything else.
 **What we stop maintaining today**, and should not debug or mention in the
 pitch: `src/backends/modal.py`, `src/backends/tamarind.py`, `src/fold/esmfold.py`,
 `src/fold/colabfold.py`, `src/fold/chai.py`, `src/generate/rfdiffusion.py` (v1,
-superseded by RFD3), `src/score/tier3.py`, most of `MANIFEST.md`. Half of
-`TODO.md` is now moot — good news; it was honest bookkeeping about work we no
+superseded by RFD3), `src/score/tier3.py`, most of `outdated/MANIFEST.md`. Half of
+`outdated/TODO.md` is now moot — good news; it was honest bookkeeping about work we no
 longer need. `src/io/` stays and matters more than ever: **three numbering
 systems are now in play** (HG3.17 reference, RFD3 output, Boltz output) with
 fixed-atom mappings that must survive all three, and `verify_boltz.py` maps

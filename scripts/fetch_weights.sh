@@ -32,7 +32,10 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MANIFEST="$REPO_DIR/MANIFEST.md"
+# MANIFEST.md moved to outdated/ when the challenge turned out to be Kemp on a
+# provided AWS cluster: this script belongs to the Euler/Modal world and is not
+# part of the Kemp pipeline, which reads weights straight from /mnt/ref.
+MANIFEST="$REPO_DIR/outdated/MANIFEST.md"
 
 # The interpreter used for python-side downloads. Should be the ACTIVE
 # environment's python (the venv from env/euler_setup.sh, or .venv locally),

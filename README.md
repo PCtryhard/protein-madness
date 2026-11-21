@@ -25,7 +25,7 @@ python -m src.evolve.driver --help           # the design loop
 ```
 
 > Historical note: this repo was built *before* the challenge was announced, to
-> be target-agnostic. `PLAN.md`, `MANIFEST.md` and much of `TODO.md` still
+> be target-agnostic. `outdated/PLAN.md`, `outdated/MANIFEST.md` and much of `outdated/TODO.md` still
 > describe that world — Euler/Modal backends, ESMFold, an unknown target. They
 > are kept for the record; **`BRIEF.md` supersedes them.**
 
@@ -89,7 +89,7 @@ python -m src.io.validate_target configs/target.yaml     # RUN THIS FIRST. It ca
 python scripts/run_pipeline.py --target configs/target.yaml --out results/run1
 ```
 
-Full setup, module ownership and how we share results: **[ONBOARDING.md](ONBOARDING.md)**.
+Full setup, module ownership and how we share results: **[outdated/ONBOARDING.md](outdated/ONBOARDING.md)**.
 
 ## Definition of done
 
@@ -100,7 +100,7 @@ week's work — not feature count. A metric that gives a different answer on
 Euler than on a laptop is a metric we cannot put in front of a judge.
 
 Current state: passing on the dev laptop (~15 s). Euler and Modal are not yet
-verified — see [TODO.md](TODO.md).
+verified — see [outdated/TODO.md](outdated/TODO.md).
 
 ## How it fits together
 
@@ -111,7 +111,7 @@ configs/pipeline.yaml┘                      │                               
                                             └──> score/tier1 ──┐            │
                                                  score/tier2 <─────────────┘
                                                                │
-                                     results/leaderboard.csv <─┘ ──> report/ ──> PITCH.md
+                                     results/leaderboard.csv <─┘ ──> report/ ──> outdated/PITCH.md
 ```
 
 Every stage is a CLI with one contract (`--in`, `--out`, `--config`), writes
@@ -127,7 +127,7 @@ nothing in the pitch is typed by hand.
 
 ## What is real and what is not
 
-Honesty about this is the point of the repo — see [TODO.md](TODO.md) for the
+Honesty about this is the point of the repo — see [outdated/TODO.md](outdated/TODO.md) for the
 full list.
 
 | Area | State |
@@ -148,11 +148,20 @@ metric whose inputs are missing is `NaN` with a note, or raises — never 0.0.
 
 ## Documents
 
-- **[BRIEF.md](BRIEF.md) — the strategy. Start here.**
-- **[EVOLVE.md](EVOLVE.md) — how to run the design loop (both arms).**
-- [ONBOARDING.md](ONBOARDING.md) — zero to passing smoke test in under 20 minutes
-- [PLAN.md](PLAN.md) — the 30-hour weekend timeline, owners, hard freeze
-- [PITCH.md](PITCH.md) — Sunday's pitch skeleton; numbers fill in automatically
-- [DECISIONS.md](DECISIONS.md) — append-only: what we decided and why
-- [TODO.md](TODO.md) — everything stubbed, with exactly what is missing
-- [MANIFEST.md](MANIFEST.md) — where every model weight and database lives, per backend
+**Live — read these:**
+
+- **[BRIEF.md](BRIEF.md)** — the strategy: what we are scored on, the compute,
+  the plan. Start here.
+- **[EVOLVE.md](EVOLVE.md)** — how to run the design loop, for both the de novo
+  and partial-diffusion arms.
+- [DECISIONS.md](DECISIONS.md) — append-only: what we decided and why. Still in
+  use; add to it rather than editing old entries.
+
+**Superseded — [outdated/](outdated/):**
+
+`PLAN.md`, `MANIFEST.md`, `TODO.md`, `ONBOARDING.md`, `PITCH.md` and
+`CLAUDE_CODE_BRIEF.md` were written before the challenge was announced, when we
+assumed an unknown target and Euler + Modal compute. All of that turned out
+wrong. They are kept because they record what we believed and why — which is
+worth more at hour 25 than a tidy repo — but **nothing in there is maintained.**
+[outdated/README.md](outdated/README.md) maps each one to what replaced it.
