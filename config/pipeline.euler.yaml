@@ -41,6 +41,10 @@ rfdiffusion: null
 
 ligandmpnn:
   run_script: /cluster/scratch/malexandrov/pdh/tools/LigandMPNN/run.py
+  # Explicit rather than relying on the default, so this works even if the
+  # pipeline is launched from a different environment. This interpreter has
+  # torch 2.7.1+cu126; the module-system python has no torch.
+  python: /cluster/home/malexandrov/pm-rfd3-env/bin/python
   checkpoint: /cluster/scratch/malexandrov/pdh/tools/ligandmpnn/ligandmpnn_v_32_010_25.pt
   temperature: 0.1
   sequences_per_backbone: 3

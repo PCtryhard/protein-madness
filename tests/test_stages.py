@@ -379,3 +379,24 @@ def test_run_command_attaches_the_error_output():
 def test_run_command_names_a_missing_executable():
     with pytest.raises(StageError, match="executable not found"):
         run_command(["definitely-not-a-real-binary-xyz"], stage="test")
+
+
+def test_ligandmpnn_defaults_to_the_running_interpreter(pipeline, tmp_path):
+    """A bare "python" resolves to whatever is on PATH, which on a cluster is
+    usually a module-system interpreter with no torch. That failure cost a GPU
+    allocation, so the default is now the interpreter running the pipeline."""
+    import sys
+
+    cfg = pipeline.ligandmpnn.model_copy(update={"python": None})
+    cmd = ligandmpnn.build_command(
+        cfg, tmp_path / "bb.pdb", tmp_path / "out", "A12", 4
+    )
+    assert cmd[0] == sys.executable
+
+
+def test_ligandmpnn_interpreter_can_be_set_explicitly(pipeline, tmp_path):
+    cfg = pipeline.ligandmpnn.model_copy(update={"python": "/envs/x/bin/python"})
+    cmd = ligandmpnn.build_command(
+        cfg, tmp_path / "bb.pdb", tmp_path / "out", "A12", 4
+    )
+    assert cmd[0] == "/envs/x/bin/python"

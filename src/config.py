@@ -104,6 +104,12 @@ class RFD3Cfg(Strict):
 
 class LigandMPNNCfg(Strict):
     run_script: str
+    # Which interpreter runs run.py. null means "the one running this
+    # pipeline", which is almost always right: that environment was chosen
+    # because it has torch. A bare "python" resolves to whatever the module
+    # system put on PATH, which on Euler has no torch at all -- that failure
+    # cost a GPU allocation.
+    python: str | None = None
     checkpoint: str = "ligandmpnn_v_32_010_25.pt"
     temperature: Annotated[float, Field(gt=0.0)] = 0.1
     sequences_per_backbone: Annotated[int, Field(ge=1)] = 4
