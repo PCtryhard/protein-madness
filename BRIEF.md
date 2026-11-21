@@ -181,9 +181,16 @@ verification job and wrong for ours.
 Boltz-2 is the expensive step and the only step that produces score. The entire
 design of the evolution loop below is shaped by that number.
 
-**Plus Euler: 32 more GPUs, measured and working** (§8). A fold there takes 34 s
-and uses 3.3 GB of an 11 GB card. Between the two clusters we have **34 GPUs**
-and something like one completed fold per second in aggregate.
+**Plus Euler** (§8), where a fold takes 34 s and uses 3.3 GB of an 11 GB card.
+
+**Be careful how you read the Euler capacity.** The 32-GPU reservation is **not
+ours** — it was created by ETH for the whole event
+(`Groups=urbanb-group,bsse-wicky-euler-hackathon`) and is shared with every
+other participant, which matches the "32 GPUs shared across ~70 participants"
+note in `DECISIONS.md`. We are one team among many on it. Treat our fair share
+as a handful of GPUs at a time, not 32, and throttle array jobs accordingly.
+Taking the whole reservation because Slurm would let us is a way to make
+enemies and get the reservation policed.
 
 **Compute has therefore stopped being the constraint on anything.** The binding
 constraint for the rest of the weekend is how fast we can build the pipeline
@@ -786,18 +793,25 @@ rather than argued about it.
 | VRAM each | 24 GB | 11 GB |
 | Peak VRAM used, 260 res + 6NT | — | **3354 MiB of 11264** |
 | Seconds per fold | 21 | **34** |
-| Availability | ours | reserved to Sun 20:00 |
+| Availability | ours | SHARED event reservation, to Sun 20:00 |
 
 A 260-residue complex uses **under a third of a 2080Ti**. The feared bf16
 problem did not materialise: `torch.cuda.is_bf16_supported()` returned **True**
 on sm_75, and the run completed with exit code 0 at only 1.6× the L4's time.
 Recorded plainly because this brief predicted the opposite.
 
-So **all 32 GPUs are usable**, giving roughly one completed fold per second
-across the reservation. Two follow-ups worth a few minutes each: whether two or
-three Boltz processes can share one card (3.3 GB fits three times into 11 GB),
-and the §8.2 cross-cluster agreement check before pooling Euler and AWS numbers
-in one leaderboard.
+So the 2080Ti's **can** fold, which was the open question.
+
+**But the reservation is shared, not ours** — see §2. `Users=(null)`,
+`Groups=urbanb-group,bsse-wicky-euler-hackathon`: ETH created it for the event,
+and the nodes already show other people's jobs on them. Our fair share is a few
+GPUs at a time. The useful conclusion is not "we have 32 GPUs", it is **"Euler
+can fold, so we are not bottlenecked on the 2 AWS cards"**.
+
+Two follow-ups worth a few minutes each: whether two or three Boltz processes
+can share one card (3.3 GB fits three times into 11 GB), and the §8.2
+cross-cluster agreement check before pooling Euler and AWS numbers in one
+leaderboard.
 
 Setup that now exists on Euler, ready to use:
 `$SCRATCH/pdh/venv` (Boltz **2.2.1**, pinned to match AWS; torch 2.15.0+cu132),
