@@ -1,6 +1,7 @@
 # BRIEF — Kemp eliminase, Perlin × D-BSSE, 21–22 Nov 2026, team 04
 
-Status: **draft for team discussion.** Not yet agreed, not yet on `main`.
+Status: **draft for team discussion.** On `main` so everyone can read it;
+**not yet agreed.** Argue with it, then edit it — §14 is the agenda.
 
 This supersedes the "unknown target" assumptions in `PLAN.md` and `README.md`.
 The challenge is announced, the compute is not what we planned for, and the
