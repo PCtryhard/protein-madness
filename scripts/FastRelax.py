@@ -101,14 +101,17 @@ def main():
     except (ImportError, KeyError, OSError, RuntimeError, ValueError) as exc:
         parser.error(str(exc))
 
+    print(f"Structure: {cif.resolve()}")
     for source, target, aa, _, _ in motif:
         print(f"Input {args.chain}{source} {aa} -> motif A{target}")
     if args.map_only:
         return
     if not args.params.is_file():
         parser.error(f"missing 6NT params: {args.params}")
-    if out.exists() or out.suffix.lower() != ".pdb":
-        parser.error("--out must name a new .pdb file")
+    if out.suffix.lower() != ".pdb":
+        parser.error(f"--out must end in .pdb: {out}")
+    if out.exists():
+        parser.error(f"output already exists: {out}; pass --out with a new filename")
     try:
         import pyrosetta
     except ImportError as exc:
