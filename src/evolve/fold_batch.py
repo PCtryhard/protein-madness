@@ -63,7 +63,12 @@ def write_generation(
         if "/" in design_id or "\\" in design_id:
             raise ValueError(f"design id {design_id!r} is not a safe filename")
         path = out_dir / f"{design_id}.yaml"
-        path.write_text(yaml.safe_dump(design_yaml(sequence, ligand_ccd), sort_keys=False))
+        # newline="\n" always: these files are written on a laptop and read on a
+        # Linux cluster, and Python would otherwise translate to CRLF on Windows.
+        path.write_text(
+            yaml.safe_dump(design_yaml(sequence, ligand_ccd), sort_keys=False),
+            newline="\n",
+        )
     log.info("wrote %d design YAMLs to %s", len(designs), out_dir)
     return out_dir
 
@@ -242,6 +247,8 @@ def write_fold_script(
         ]
     lines.append('echo "=== fold batch complete"')
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines) + "\n")
+    # newline="\n" is not cosmetic: sbatch refuses a script containing CRLF
+    # ("Batch script contains DOS line breaks"), and we write these on Windows.
+    path.write_text("\n".join(lines) + "\n", newline="\n")
     log.info("wrote fold script %s (%d seeds, site=%s)", path, len(seeds), profile.name)
     return path

@@ -372,6 +372,20 @@ def test_fold_command_matches_the_organisers_flags():
         assert flag in command
 
 
+def test_written_files_use_unix_line_endings(tmp_path):
+    """sbatch refuses a script with CRLF, and we author these on Windows.
+
+    Regression test: the first real submission failed with "Batch script
+    contains DOS line breaks".
+    """
+    script = fold_batch.write_fold_script(
+        tmp_path / "fold.sbatch", fold_batch.SiteProfile.euler(), "d", "out", [1]
+    )
+    assert b"\r\n" not in script.read_bytes()
+    designs = fold_batch.write_generation(tmp_path / "designs", {"d1": "ACDEF"})
+    assert b"\r\n" not in (designs / "d1.yaml").read_bytes()
+
+
 def test_write_fold_script_covers_every_seed(tmp_path):
     path = fold_batch.write_fold_script(
         tmp_path / "fold.sbatch", fold_batch.SiteProfile.euler(), "d", "out", [1, 2, 3]
