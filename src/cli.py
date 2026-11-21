@@ -396,7 +396,22 @@ def build_parser() -> argparse.ArgumentParser:
         description="Motif-anchored protein design with score-guided search.",
     )
     parser.add_argument("-v", "--verbose", action="store_true")
-    sub = parser.add_subparsers(dest="command", required=True)
+
+    # -v accepted after the subcommand as well as before it. argparse puts
+    # top-level flags before the subcommand, which is not where anyone types
+    # them: `run --name x -v` is the natural order and used to be an error.
+    verbose_parent = argparse.ArgumentParser(add_help=False)
+    # default=SUPPRESS so that when -v is NOT given after the subcommand, the
+    # subparser leaves the namespace alone. With a normal False default it
+    # overwrites the top-level flag, and `-v smoke` silently stops working --
+    # which is the other half of this bug.
+    verbose_parent.add_argument(
+        "-v", "--verbose", action="store_true", default=argparse.SUPPRESS
+    )
+
+    sub = parser.add_subparsers(dest="command", required=True,
+                                parser_class=lambda **kw: argparse.ArgumentParser(
+                                    parents=[verbose_parent], **kw))
 
     def add_config_args(p: argparse.ArgumentParser) -> None:
         p.add_argument("--pipeline", default=DEFAULT_PIPELINE)

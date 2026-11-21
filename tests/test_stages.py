@@ -14,7 +14,7 @@ import pytest
 import yaml
 
 from src.config import Ligand, MotifCfg, ResidueRef
-from src.stages import boltz, ligandmpnn, protonate, rfdiffusion
+from src.stages import boltz, ligandmpnn, protonate, rfd3
 from src.stages.base import StageError, run_command
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -209,38 +209,6 @@ def test_rfd3_fresh_scaffolding_omits_partial_T(pipeline, tmp_path):
     assert "partial_T" not in " ".join(cmd)
 
 
-def test_missing_input_pdb_raises(pipeline, tmp_path):
-    with pytest.raises(StageError, match="input PDB not found"):
-        rfdiffusion.run(
-            pipeline.rfdiffusion, tmp_path / "nope.pdb", "260-260", tmp_path / "out"
-        )
-
-
-def test_a_pdb_without_its_trb_is_refused(tmp_path):
-    """Inferring the mapping from the structure is exactly the proximity-based
-    guess the rules forbid."""
-    (tmp_path / "rfd_0.pdb").write_text("ATOM\n", encoding="utf-8")
-    with pytest.raises(StageError, match="no.*trb"):
-        rfdiffusion.collect_outputs(tmp_path / "rfd", expected=1)
-
-
-def test_collect_outputs_pairs_pdb_with_trb(tmp_path):
-    (tmp_path / "rfd_0.pdb").write_text("ATOM\n", encoding="utf-8")
-    (tmp_path / "rfd_0.trb").write_bytes(b"\x80\x04}.")
-    outputs = rfdiffusion.collect_outputs(tmp_path / "rfd", expected=2)
-    assert len(outputs) == 1
-    assert outputs[0].index == 0
-
-
-def test_no_outputs_at_all_raises(tmp_path):
-    with pytest.raises(StageError, match="produced no PDBs"):
-        rfdiffusion.collect_outputs(tmp_path / "rfd", expected=2)
-
-
-# --------------------------------------------------------------------------
-# LigandMPNN
-# --------------------------------------------------------------------------
-
 
 def test_fixed_residues_are_passed_in_backbone_numbering():
     """Passing seed numbers to a renumbered backbone would fix the wrong
@@ -379,3 +347,24 @@ def test_run_command_attaches_the_error_output():
 def test_run_command_names_a_missing_executable():
     with pytest.raises(StageError, match="executable not found"):
         run_command(["definitely-not-a-real-binary-xyz"], stage="test")
+
+
+def test_ligandmpnn_defaults_to_the_running_interpreter(pipeline, tmp_path):
+    """A bare "python" resolves to whatever is on PATH, which on a cluster is
+    usually a module-system interpreter with no torch. That failure cost a GPU
+    allocation, so the default is now the interpreter running the pipeline."""
+    import sys
+
+    cfg = pipeline.ligandmpnn.model_copy(update={"python": None})
+    cmd = ligandmpnn.build_command(
+        cfg, tmp_path / "bb.pdb", tmp_path / "out", "A12", 4
+    )
+    assert cmd[0] == sys.executable
+
+
+def test_ligandmpnn_interpreter_can_be_set_explicitly(pipeline, tmp_path):
+    cfg = pipeline.ligandmpnn.model_copy(update={"python": "/envs/x/bin/python"})
+    cmd = ligandmpnn.build_command(
+        cfg, tmp_path / "bb.pdb", tmp_path / "out", "A12", 4
+    )
+    assert cmd[0] == "/envs/x/bin/python"

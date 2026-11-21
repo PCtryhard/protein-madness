@@ -10,6 +10,8 @@ invisible.
 
 from __future__ import annotations
 
+import sys
+
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -62,7 +64,7 @@ def build_command(
 ) -> list[str]:
     out_dir.mkdir(parents=True, exist_ok=True)
     cmd = [
-        "python", cfg.run_script,
+        cfg.python or sys.executable, cfg.run_script,
         "--model_type", "ligand_mpnn",
         "--checkpoint_ligand_mpnn", cfg.checkpoint,
         "--pdb_path", str(input_pdb),

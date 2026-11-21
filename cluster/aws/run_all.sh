@@ -8,7 +8,7 @@
 #
 # THE PROFILE DEFAULTS TO SEED-ONLY.
 #
-# config/pipeline.small.yaml is 10 backbones x 8 sequences with max_cycles 0:
+# config/pipeline.yaml is 10 backbones x 8 sequences with max_cycles 0:
 # about an hour per variant, and it exercises the whole forward pass and writes
 # a leaderboard without committing to a multi-hour search. That is what you
 # want first, so it is the default here rather than something to remember.
@@ -48,13 +48,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-if [ -n "${PM_PIPELINE:-}" ]; then
-    PIPELINE="$PM_PIPELINE"
-elif [ "$FULL" -eq 1 ]; then
-    PIPELINE="config/pipeline.yaml"
-else
-    PIPELINE="config/pipeline.small.yaml"
-fi
+PIPELINE="${PM_PIPELINE:-config/pipeline.yaml}"
 [ -r "$PIPELINE" ] || { echo "pipeline config not found: $PIPELINE" >&2; exit 1; }
 
 # Say plainly which kind of run this is. Starting a 6-hour search when you

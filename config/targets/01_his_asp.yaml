@@ -19,7 +19,7 @@ seeds:
   # The id is quoted because YAML reads a bare 01 as the integer 1, and the
   # id ends up in design ids, filenames and the scaffold column.
   - id: "01"
-    pdb: data/01/inputs/crystal-motif/01_his_asp_.pdb
+    pdb: data/01/inputs/01_his_asp_.pdb.pre-boltz
     contig: "260-260"   # RFD3 total length; 260 is the limit
 
 ligand:

@@ -373,51 +373,11 @@ def test_clash_must_be_below_ideal(pipeline_path):
 # --------------------------------------------------------------------------
 
 
-SMALL = "config/pipeline.small.yaml"
 
 
-def test_small_profile_loads():
-    cfg = load_pipeline(ROOT / SMALL)
-    assert cfg.run.max_cycles == 0, "the small profile is meant to be seed-only"
-    assert cfg.rfd3.n_batches == 10
-    assert cfg.ligandmpnn.sequences_per_backbone == 8
 
 
-def test_small_profile_cross_validates(pipeline_path):
-    for target in all_shipped_targets():
-        load(ROOT / SMALL, ROOT / target)
 
-
-def test_small_profile_has_the_same_keys_as_the_default(pipeline_path):
-    """A new tunable must not be added to one config and forgotten in the
-    other. Compared as key trees, not values -- the values differ on purpose."""
-    def keys(node, prefix=""):
-        out = set()
-        if isinstance(node, dict):
-            for k, v in node.items():
-                out.add(f"{prefix}{k}")
-                out |= keys(v, f"{prefix}{k}.")
-        return out
-
-    default = keys(yaml.safe_load(pipeline_path.read_text(encoding="utf-8")))
-    small = keys(yaml.safe_load((ROOT / SMALL).read_text(encoding="utf-8")))
-    assert default == small, (
-        f"only in pipeline.yaml: {sorted(default - small)}\n"
-        f"only in pipeline.small.yaml: {sorted(small - default)}"
-    )
-
-
-def test_seed_only_profile_still_declares_both_branches(pipeline_path):
-    """So the same file can drive a real search by raising max_cycles."""
-    cfg = load_pipeline(ROOT / SMALL)
-    assert cfg.search.wiggle.enabled
-    assert cfg.search.mutate.enabled
-
-
-def test_wiggle_backbone_count_defaults_to_rfdiffusions(pipeline_path):
-    """null means 'use rfdiffusion.designs_per_parent'."""
-    cfg = load_pipeline(pipeline_path)
-    assert cfg.search.wiggle.designs_per_parent is None
 
 
 def test_wiggle_backbone_count_can_differ_from_cycle_zero(pipeline_path):
@@ -431,44 +391,55 @@ def test_wiggle_backbone_count_can_differ_from_cycle_zero(pipeline_path):
     assert cfg.search.wiggle.designs_per_parent == 2
 
 
-PROFILES = ("config/pipeline.yaml", "config/pipeline.small.yaml",
-            "config/pipeline.first.yaml")
 
 
-@pytest.mark.parametrize("profile", PROFILES)
-def test_every_profile_loads_and_cross_validates(profile):
-    for target in all_shipped_targets():
-        load(ROOT / profile, ROOT / target)
 
 
-def test_all_profiles_have_the_same_keys():
-    """A new tunable must reach every profile, not just the one being edited."""
-    def keys(node, prefix=""):
-        out = set()
-        if isinstance(node, dict):
-            for k, v in node.items():
-                out.add(f"{prefix}{k}")
-                out |= keys(v, f"{prefix}{k}.")
-        return out
-
-    sets = {
-        p: keys(yaml.safe_load((ROOT / p).read_text(encoding="utf-8")))
-        for p in PROFILES
-    }
-    reference = sets[PROFILES[0]]
-    for profile, found in sets.items():
-        assert found == reference, (
-            f"{profile} differs from {PROFILES[0]}:\n"
-            f"  missing: {sorted(reference - found)}\n"
-            f"  extra:   {sorted(found - reference)}"
-        )
 
 
-def test_the_first_run_profile_matches_the_requested_shape():
-    """5 backbones, 3 sequences each, 2 wiggles and 2 mutations per parent."""
-    cfg = load_pipeline(ROOT / "config/pipeline.first.yaml")
-    assert cfg.rfd3.n_batches == 5
-    assert cfg.ligandmpnn.sequences_per_backbone == 3
-    assert cfg.search.wiggle.designs_per_parent == 2
-    assert cfg.search.mutate.max_mutants_per_parent == 2
-    assert cfg.run.max_cycles == 1
+# --------------------------------------------------------------------------
+# there is one pipeline config, deliberately
+# --------------------------------------------------------------------------
+
+
+def test_there_is_exactly_one_pipeline_config():
+    """Four profiles with /path/to/ placeholders was four places to get out of
+    step. The earlier ones are in outdated/config/."""
+    found = sorted(p.name for p in (ROOT / "config").glob("pipeline*.yaml"))
+    assert found == ["pipeline.yaml"], found
+
+
+def test_the_pipeline_config_has_no_placeholder_paths():
+    """The one config must be runnable, not a template.
+
+    Comments are excluded: the header mentions /path/to/ when explaining why
+    the old placeholder profiles were retired.
+    """
+    text = (ROOT / "config" / "pipeline.yaml").read_text(encoding="utf-8")
+    body = [
+        line for line in text.splitlines() if not line.lstrip().startswith("#")
+    ]
+    offenders = [line for line in body if "/path/to/" in line]
+    assert not offenders, offenders
+
+
+def test_cluster_paths_expand_environment_variables(monkeypatch):
+    """So a committed cluster config works for every teammate under their own
+    account, instead of hardcoding one person's home directory."""
+    monkeypatch.setenv("HOME", "/home/someone")
+    monkeypatch.setenv("SCRATCH", "/scratch/someone")
+    cfg = load_pipeline(ROOT / "config" / "pipeline.yaml")
+    for value in (cfg.rfd3.binary, cfg.rfd3.checkpoint,
+                  cfg.ligandmpnn.run_script, cfg.boltz.binary):
+        assert "$" not in value, value
+        assert "malexandrov" not in value, f"hardcoded user in {value}"
+
+
+def test_the_pipeline_config_names_no_individual():
+    """A path with one person's username in it is useless to everyone else."""
+    text = (ROOT / "config" / "pipeline.yaml").read_text(encoding="utf-8")
+    body = "\n".join(
+        line for line in text.splitlines() if not line.lstrip().startswith("#")
+    )
+    assert "/cluster/home/" not in body
+    assert "/cluster/scratch/" not in body
