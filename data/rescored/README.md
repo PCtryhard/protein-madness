@@ -16,8 +16,32 @@ costs no GPU and is reproducible.
 | `manifest.csv` | one row per file: new name, original `design_id`, run, lineage, scores |
 | `rerank_geometry.csv` | the re-rank table, 232 rows |
 | `rerank_geometry.json` | run metadata: the weights, the module constants, and the wildtype reference check (not the table) |
-| `rerank_round2.html` | standalone browsable leaderboard, opens offline |
+| `rerank_round2.html` | browsable leaderboard with a 3D structure viewer; the tables work offline, the viewer needs a network connection |
 | `rerank_legacy_layout.patch` | the one-function fix the run depended on, NOT applied to `scripts/` |
+
+## Viewing the structures
+
+`rerank_round2.html` embeds a 3Dmol.js viewer. Ligand in ball and stick,
+protein as ribbon, and every residue within the contact radius of the ligand
+rendered as sticks over the ribbon, plus the named catalytic residues however
+far away they sit. Everything is coloured by element throughout. The contact
+radius defaults to 3 A as heavy-atom to heavy-atom; these structures carry no
+hydrogens, so that shell is thin, typically 2 to 6 residues. Around 4.5 A
+gives a readable pocket.
+
+Two things to know:
+
+- **The viewer library comes from a CDN**, so that panel needs a network
+  connection. The tables, the chart and the leaderboard are all inline and
+  work with no network. The library cannot be bundled from here because this
+  environment has no outbound network for package downloads.
+- **Opened straight from disk, the browser will not read neighbouring
+  files.** The viewer first tries `cif/<name>` when the page is served over
+  http, then falls back to the raw GitHub URL. If neither works, use the file
+  picker at the bottom of that section, or serve the folder:
+
+      cd data/rescored && python3 -m http.server
+      # then open http://localhost:8000/rerank_round2.html
 
 ## Naming scheme
 
