@@ -1,0 +1,69 @@
+{
+    "diffused_index_map": {
+        "A17": "A17",
+        "A164": "A164",
+        "A47": "A47"
+    },
+    "metrics": {
+        "join_point_rmsd_by_token": {
+            "A17": 0.0,
+            "A164": 0.0,
+            "A47": 0.0
+        },
+        "insertion.mae": 0.0,
+        "insertion.rmcd": 0.0,
+        "insertion_rmsd": 0.0,
+        "join_point_rmsd": 0.0,
+        "n_conjoined_residues": 0,
+        "max_ca_deviation": 0.07921767234802246,
+        "n_chainbreaks": 0,
+        "n_clashing.interresidue_clashes_w_sidechain": 0,
+        "n_clashing.interresidue_clashes_w_backbone": 0,
+        "n_clashing.ligand_clashes": 0,
+        "n_clashing.ligand_min_distance": 4.149378776550293,
+        "non_loop_fraction": 0.6423076923076924,
+        "loop_fraction": 0.3576923076923077,
+        "helix_fraction": 0.4653846153846154,
+        "sheet_fraction": 0.17692307692307693,
+        "num_ss_elements": 16,
+        "radius_of_gyration": 16.363222735750316,
+        "alanine_content": 0.3,
+        "glycine_content": 0.05384615384615385,
+        "num_residues": 260,
+        "diffused_com": [
+            -0.16395621001720428,
+            -0.1795903593301773,
+            0.15949417650699615
+        ],
+        "fixed_com": [
+            3.550961494445801,
+            -1.1872209310531616,
+            -1.9861654043197632
+        ]
+    },
+    "specification": {
+        "input": "/cluster/home/malexandrov/pm-live/runs/overnight-07/structures/07_fastrelax_motif_af3.07.c00.seed/rfd3/rfd3_inputs_07_fastrelax_motif_af3_07_0_model_0.pdb",
+        "unindex": "A17,A164,A47",
+        "ligand": "6NT",
+        "extra": {
+            "example": "07_fastrelax_motif_af3_07_wiggle",
+            "task_name": "rfd3_inputs_07_fastrelax_motif_af3_07_wiggle",
+            "num_tokens_in": 264,
+            "num_residues_in": 264,
+            "num_chains": 2,
+            "num_atoms": 1781,
+            "num_residues": 265,
+            "example_id": "rfd3_inputs_07_fastrelax_motif_af3_07_wiggle_1"
+        },
+        "select_fixed_atoms": {
+            "6NT": "ALL",
+            "A17": "OE1,CD,OE2",
+            "A164": "CD2,CE1,NE2",
+            "A47": "OE1,CD,NE2"
+        },
+        "select_unfixed_sequence": false,
+        "partial_t": 2.0
+    },
+    "ckpt_path": "/cluster/scratch/malexandrov/pdh/weights/rfd3/rfd3_latest.ckpt",
+    "seed": 1
+}

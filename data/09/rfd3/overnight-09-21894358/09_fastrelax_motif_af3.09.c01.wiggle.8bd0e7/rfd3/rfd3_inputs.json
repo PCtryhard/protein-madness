@@ -1,0 +1,14 @@
+{
+  "09_fastrelax_motif_af3_09_wiggle": {
+    "input": "/cluster/home/malexandrov/pm-live/runs/overnight-09/structures/09_fastrelax_motif_af3.09.c00.seed/rfd3/rfd3_inputs_09_fastrelax_motif_af3_09_10_model_0.pdb",
+    "unindex": "A238,A20,A144",
+    "select_fixed_atoms": {
+      "6NT": "ALL",
+      "A238": "OD1,CG,OD2",
+      "A20": "OD1,CG,ND2",
+      "A144": "OD1,CG,ND2"
+    },
+    "ligand": "6NT",
+    "partial_t": 2.0
+  }
+}

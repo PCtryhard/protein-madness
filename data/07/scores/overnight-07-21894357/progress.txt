@@ -1,0 +1,13 @@
+run      : overnight-07
+target   : 07_fastrelax_motif_af3
+started  : 2026-11-22T02:49:59+00:00
+updated  : 2026-11-22T04:10:32+00:00
+elapsed  : 1h 20m 32s
+
+designs  : 76
+  scored  : 4
+  gated   : 72
+
+best     : 0.7249  07_fastrelax_motif_af3.07.c00.seed.92705c
+
+rate     : 1.1 min/design (57 designs/hour)

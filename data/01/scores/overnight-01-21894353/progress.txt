@@ -1,0 +1,13 @@
+run      : overnight-01
+target   : 01_fastrelax_motif_af3
+started  : 2026-11-22T02:49:58+00:00
+updated  : 2026-11-22T04:10:26+00:00
+elapsed  : 1h 20m 27s
+
+designs  : 76
+  scored  : 10
+  gated   : 66
+
+best     : 0.8296  01_fastrelax_motif_af3.01.c01.mutate.e943af
+
+rate     : 1.1 min/design (57 designs/hour)
