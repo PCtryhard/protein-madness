@@ -1,0 +1,13 @@
+run      : depth-09
+target   : 09_fastrelax_motif_af3
+started  : 2026-11-22T04:38:37+00:00
+updated  : 2026-11-22T05:51:23+00:00
+elapsed  : 1h 12m 45s
+
+designs  : 102
+  scored  : 11
+  gated   : 91
+
+best     : 0.6863  09_fastrelax_motif_af3.09.c03.wiggle.8f9f5f
+
+rate     : 0.7 min/design (84 designs/hour)

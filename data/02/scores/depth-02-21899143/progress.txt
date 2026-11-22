@@ -1,0 +1,13 @@
+run      : depth-02
+target   : 02_fastrelax_motif
+started  : 2026-11-22T04:38:20+00:00
+updated  : 2026-11-22T06:20:09+00:00
+elapsed  : 1h 41m 48s
+
+designs  : 102
+  scored  : 8
+  gated   : 94
+
+best     : 0.6716  02_fastrelax_motif.02.c03.mutate.cce984
+
+rate     : 1.0 min/design (60 designs/hour)

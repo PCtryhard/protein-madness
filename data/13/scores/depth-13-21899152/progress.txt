@@ -1,0 +1,13 @@
+run      : depth-13
+target   : 13_fastrelax_motif_af3
+started  : 2026-11-22T04:38:28+00:00
+updated  : 2026-11-22T05:48:07+00:00
+elapsed  : 1h 09m 39s
+
+designs  : 102
+  scored  : 15
+  gated   : 87
+
+best     : 0.7672  13_fastrelax_motif_af3.13.c02.mutate.1b66a4
+
+rate     : 0.7 min/design (88 designs/hour)

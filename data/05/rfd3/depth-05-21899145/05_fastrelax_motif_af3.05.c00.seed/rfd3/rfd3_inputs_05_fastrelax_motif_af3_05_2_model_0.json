@@ -1,0 +1,70 @@
+{
+    "diffused_index_map": {
+        "A229": "A37",
+        "A261": "A183",
+        "A291": "A23"
+    },
+    "metrics": {
+        "join_point_rmsd_by_token": {
+            "A229": 0.6917874813079834,
+            "A261": 1.396925687789917,
+            "A291": 0.7053192853927612
+        },
+        "insertion.mae": 1.2468923727671306,
+        "insertion.rmcd": 0.7396152019500732,
+        "insertion_rmsd": 0.8170971075693766,
+        "join_point_rmsd": 0.9313441514968872,
+        "n_conjoined_residues": 0,
+        "max_ca_deviation": 0.05696725845336914,
+        "n_chainbreaks": 0,
+        "n_clashing.interresidue_clashes_w_sidechain": 1,
+        "n_clashing.interresidue_clashes_w_backbone": 0,
+        "n_clashing.ligand_clashes": 0,
+        "n_clashing.ligand_min_distance": 3.6041152477264404,
+        "non_loop_fraction": 0.5846153846153845,
+        "loop_fraction": 0.4153846153846154,
+        "helix_fraction": 0.39615384615384613,
+        "sheet_fraction": 0.18846153846153846,
+        "num_ss_elements": 17,
+        "radius_of_gyration": 16.367162636761147,
+        "alanine_content": 0.25384615384615383,
+        "glycine_content": 0.06538461538461539,
+        "num_residues": 260,
+        "diffused_com": [
+            -3.5703964233398438,
+            0.780442476272583,
+            1.5723360776901245
+        ],
+        "fixed_com": [
+            -0.00015113467816263437,
+            -0.0010695684468373656,
+            -0.0015345981810241938
+        ]
+    },
+    "specification": {
+        "input": "/cluster/home/malexandrov/pm-live/data/05/inputs/05_fastrelax_motif_af3.pdb",
+        "contig": "260-260",
+        "unindex": "A229,A261,A291",
+        "ligand": "6NT",
+        "extra": {
+            "example": "05_fastrelax_motif_af3_05",
+            "task_name": "rfd3_inputs_05_fastrelax_motif_af3_05",
+            "sampled_contig": "260P",
+            "num_tokens_in": 264,
+            "num_residues_in": 264,
+            "num_chains": 2,
+            "num_atoms": 1321,
+            "num_residues": 265,
+            "example_id": "rfd3_inputs_05_fastrelax_motif_af3_05_2"
+        },
+        "select_fixed_atoms": {
+            "A229": "OE1,CD,OE2",
+            "A261": "CD2,CE1,NE2",
+            "A291": "CD2,CE1,NE2",
+            "6NT": "ALL"
+        },
+        "select_unfixed_sequence": false
+    },
+    "ckpt_path": "/cluster/scratch/malexandrov/pdh/weights/rfd3/rfd3_latest.ckpt",
+    "seed": 1
+}
