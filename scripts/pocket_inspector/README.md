@@ -4,7 +4,7 @@ A browsable 3D view of the rescored designs. One command builds it from
 `data/rescored/`; you open the result in a browser.
 
 ```bash
-python scripts/pocket_inspector/build_inspector.py --online
+python3 scripts/pocket_inspector/build_inspector.py --online
 open inspector/pocket_inspector_online.html
 ```
 
@@ -63,7 +63,7 @@ Point it somewhere else with `--base`, for any static host that allows
 cross-origin reads:
 
 ```bash
-python scripts/pocket_inspector/build_inspector.py --online \
+python3 scripts/pocket_inspector/build_inspector.py --online \
   --base https://example.org/rescored/
 ```
 
@@ -85,10 +85,10 @@ first time even for the offline ones.
 
 ```bash
 # a checkout somewhere else
-python scripts/pocket_inspector/build_inspector.py --rescored /path/to/data/rescored
+python3 scripts/pocket_inspector/build_inspector.py --rescored /path/to/data/rescored
 
 # write it elsewhere
-python scripts/pocket_inspector/build_inspector.py --out ~/Desktop/inspector
+python3 scripts/pocket_inspector/build_inspector.py --out ~/Desktop/inspector
 ```
 
 ## Do not commit the output

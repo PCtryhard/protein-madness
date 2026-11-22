@@ -5,7 +5,7 @@ Reads only committed data -- `data/rescored/` -- and writes a page you open in
 a browser. Nothing is refolded, nothing is re-scored, no GPU, no network, and
 no dependencies beyond the Python standard library.
 
-    python scripts/pocket_inspector/build_inspector.py
+    python3 scripts/pocket_inspector/build_inspector.py
     open inspector/pocket_inspector.html
 
 WHAT IT SHOWS
