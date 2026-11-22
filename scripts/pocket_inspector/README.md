@@ -4,9 +4,13 @@ A browsable 3D view of the rescored designs. One command builds it from
 `data/rescored/`; you open the result in a browser.
 
 ```bash
-python scripts/pocket_inspector/build_inspector.py
-open inspector/pocket_inspector.html
+python scripts/pocket_inspector/build_inspector.py --online
+open inspector/pocket_inspector_online.html
 ```
+
+That gives a 28 kB page that pulls the structures from this repository as you
+browse. Send it to someone and it works on their machine with no checkout, no
+build and no copy of the data. Everything else below is for working offline.
 
 No dependencies beyond the Python standard library, no GPU, no network while
 building. Nothing is refolded or re-scored — this reads committed data and
@@ -34,12 +38,34 @@ Alongside the viewport:
 - Per-bond out-of-plane offset and group angle, the five re-rank terms, the
   catalytic and site residues, and the original `design_id` and run.
 
-## Two output shapes
+## Three output shapes
 
 | flag | result | how to open |
 | --- | --- | --- |
-| `--single-file` (default) | one `.html`, about 40 MB, every structure embedded | double click it |
+| `--online` | one `.html`, 28 kB, fetches this repo's files as you browse | double click it; needs internet |
+| `--single-file` (default) | one `.html`, about 40 MB, every structure embedded | double click it; works offline |
 | `--split` | `index.html` + `designs.json` + one bundle per variant | needs a server, see below |
+
+**`--online` is the one to share.** It reads `manifest.csv`,
+`rerank_geometry.csv` and `cif/*.cif` straight from
+`raw.githubusercontent.com`, which serves `access-control-allow-origin: *`, so
+any browser may fetch them. The bond distances are then measured in the
+browser from those coordinates, the same arithmetic the offline builds do at
+build time. It also follows the repository: re-run the re-rank, push, and
+every copy of the page shows the new numbers without being rebuilt.
+
+Two limits worth stating plainly. It needs the viewer to be online. And **it
+only works while this repository is public** — a private repo's raw URLs
+require a token, and a token must never be embedded in a page other people
+open. If the repo goes private, hand people the `--single-file` build instead.
+
+Point it somewhere else with `--base`, for any static host that allows
+cross-origin reads:
+
+```bash
+python scripts/pocket_inspector/build_inspector.py --online \
+  --base https://example.org/rescored/
+```
 
 Browsers refuse `fetch()` from `file://`, so the split build needs one:
 
@@ -48,11 +74,12 @@ cd inspector && python3 -m http.server 8000
 # then open http://localhost:8000/
 ```
 
-The single file is the one to send someone. The split build is better if you
-want to edit the page, since you are not reloading 40 MB each time.
+The single file is the one to send someone who has no internet, or to keep as
+a frozen snapshot of today's numbers. The split build is better if you want to
+edit the page, since you are not reloading 40 MB each time.
 
-Either way the page loads 3Dmol.js from a CDN, so the browser needs network
-access the first time. Everything else is local.
+Every build loads 3Dmol.js from a CDN, so the browser needs network access the
+first time even for the offline ones.
 
 ## Other options
 
@@ -78,9 +105,10 @@ git history is 40 MB nobody can remove later.
 | `template.html` | the page itself, with a single hook where the data is inlined |
 | `README.md` | this |
 
-`template.html` is a working page on its own — it falls back to fetching
-`designs.json` and `b/v*.json` when no data has been inlined, which is exactly
-what `--split` produces.
+`template.html` is a working page on its own. It has two hooks the builder
+fills in, `/*__DATA__*/` and `/*__REMOTE__*/`, and with neither filled it falls
+back to fetching sibling `designs.json` and `b/v*.json` — which is exactly what
+`--split` produces.
 
 ## What the page cannot tell you
 

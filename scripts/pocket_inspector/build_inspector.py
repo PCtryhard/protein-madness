@@ -25,6 +25,13 @@ TWO OUTPUT SHAPES
                   embedded. Large -- tens of MB -- but it opens by double
                   clicking, with no server and no network.
 
+  --online        a ~30 kB page that fetches the repo's own files from
+                  raw.githubusercontent.com as you browse. Send someone the
+                  file, or host it anywhere; it needs no build on their side
+                  and no copy of the data. Only works while the repository is
+                  public -- a private repo's raw URLs require a token, and a
+                  token must never be put in a page other people open.
+
   --split         index.html plus designs.json and one bundle per variant.
                   Much smaller to move around, but browsers refuse fetch()
                   from file://, so it needs a server:
@@ -53,6 +60,11 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 RESCORED = os.path.join(REPO, "data", "rescored")
+
+# Where the online build reads from. raw.githubusercontent.com serves
+# `access-control-allow-origin: *`, so any browser may fetch these directly.
+DEFAULT_BASE = ("https://raw.githubusercontent.com/PCtryhard/protein-madness"
+                "/main/data/rescored/")
 
 # Sidechain atoms a catalytic bond can be measured to. Backbone N and O are
 # deliberately absent: the target definitions name sidechain partners only.
@@ -240,6 +252,25 @@ def write_split(template, designs, bundles, out_dir):
     return written
 
 
+def write_online(template, base, out_dir):
+    """A page that fetches the tables and structures itself, at view time.
+
+    Nothing is embedded, so the result is tens of kilobytes rather than tens of
+    megabytes -- and it follows the repository: re-run the re-rank, push, and
+    every copy of this page shows the new numbers without being rebuilt. The
+    cost is that it only works while the repo is public and the viewer is
+    online, and the bond distances are measured in the browser rather than here.
+    """
+    if not base.endswith("/"):
+        base += "/"
+    html = template.replace("const REMOTE = null; /*__REMOTE__*/",
+                            "const REMOTE = " + json.dumps(base) + ";", 1)
+    path = os.path.join(out_dir, "pocket_inspector_online.html")
+    with open(path, "w") as fh:
+        fh.write(html)
+    return [path]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--rescored", default=RESCORED,
@@ -251,6 +282,10 @@ def main():
                        help="one self-contained .html (default)")
     shape.add_argument("--split", dest="single", action="store_false",
                        help="index.html plus JSON; needs a local server")
+    shape.add_argument("--online", dest="single", action="store_const", const="online",
+                       help="a small page that fetches the repo's files itself")
+    ap.add_argument("--base", default=DEFAULT_BASE,
+                    help="base URL the online build reads from (default: this repo on GitHub)")
     args = ap.parse_args()
 
     template_path = os.path.join(HERE, "template.html")
@@ -259,17 +294,21 @@ def main():
     with open(template_path) as fh:
         template = fh.read()
 
-    print(f"reading {args.rescored}")
-    designs = build_index(args.rescored)
-    bundles = read_structures(args.rescored, designs)
-
     os.makedirs(args.out, exist_ok=True)
-    writer = write_single_file if args.single else write_split
-    written = writer(template, designs, bundles, args.out)
+
+    if args.single == "online":
+        written = write_online(template, args.base, args.out)
+        print(f"online build; it will read {args.base} when opened")
+    else:
+        print(f"reading {args.rescored}")
+        designs = build_index(args.rescored)
+        bundles = read_structures(args.rescored, designs)
+        writer = write_single_file if args.single else write_split
+        written = writer(template, designs, bundles, args.out)
 
     total = sum(os.path.getsize(p) for p in written)
     print(f"wrote {len(written)} file(s), {total / 1e6:.1f} MB, to {args.out}")
-    if args.single:
+    if args.single == "online" or args.single is True:
         print(f"open {written[0]}")
     else:
         print(f"cd {args.out} && python3 -m http.server 8000   then open http://localhost:8000/")

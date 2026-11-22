@@ -200,7 +200,13 @@ tr:last-child td { border-bottom: none; }
 </div>
 
 <script>
+// Data layer. Exactly one of these is active in a built page.
+//   INLINE  — every structure embedded (single-file build)
+//   REMOTE  — base URL to fetch the repo's own files over HTTP (online build)
+//   neither — sibling designs.json + b/v*.json (split build, needs a server)
 const INLINE = null; /*__DATA__*/
+const REMOTE = null; /*__REMOTE__*/
+
 let D = [], BY = {}, VARIANTS = [], rankMode = "new", adjFilter = "any", curVar = "ALL", cur = null, viewer = null;
 const bundles = new Map(), cache = new Map();
 const loading = document.getElementById("loading");
@@ -208,6 +214,126 @@ const loading = document.getElementById("loading");
 const key = d => rankMode === "new" ? d.rk : d.ork;
 const passAdj = d => adjFilter === "any" || d.adj === parseInt(adjFilter, 10);
 
+/* ---------- mmCIF, enough of it ------------------------------------------
+   Boltz writes one _atom_site loop with a fixed column order, so splitting on
+   whitespace is sufficient. This is not a general mmCIF reader.             */
+function parseAtoms(text) {
+  const lines = text.split("\n");
+  const header = [];
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith("_atom_site.")) { header.push(lines[i].trim().split(".")[1]); start = i; }
+    else if (header.length) { start = i; break; }
+  }
+  if (!header.length || start < 0) return {};
+  const col = {};
+  header.forEach((h, i) => col[h] = i);
+  const out = {};
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim() || line.startsWith("#")) break;
+    const p = line.trim().split(/\s+/);
+    if (p.length < header.length) break;
+    const k = p[col["label_seq_id"]] + "|" + p[col["label_comp_id"]];
+    (out[k] || (out[k] = {}))[p[col["label_atom_id"]]] =
+      [parseFloat(p[col["Cartn_x"]]), parseFloat(p[col["Cartn_y"]]), parseFloat(p[col["Cartn_z"]])];
+  }
+  return out;
+}
+
+/* `lig_n3_to_asp229_od2` -> [N3, OD2];  `his291_ne2_to_lig_n1` -> [N1, NE2] */
+function bondAtoms(bondId) {
+  const [left, right] = bondId.split("_to_");
+  if (left.startsWith("lig_")) return [left.slice(4).toUpperCase(), right.split("_").pop().toUpperCase()];
+  return [right.split("_").pop().toUpperCase(), left.split("_").pop().toUpperCase()];
+}
+
+function measureBonds(text, catalytic) {
+  const atoms = parseAtoms(text);
+  let lig = null;
+  const byNumber = {};
+  for (const k in atoms) {
+    const [num, comp] = k.split("|");
+    if (comp === "6NT") { if (!lig) lig = atoms[k]; } else byNumber[num] = atoms[k];
+  }
+  if (!lig) return [];
+  const bonds = [];
+  (catalytic || "").split(";").forEach(part => {
+    const piece = part.trim();
+    const eq = piece.indexOf("=");
+    if (eq < 0) return;
+    const bondId = piece.slice(0, eq).trim();
+    const residue = piece.slice(eq + 1).trim();
+    const m = residue.match(/^([A-Z]{3})(\d+)$/);
+    if (!m) return;
+    const [ligAtom, protAtom] = bondAtoms(bondId);
+    const side = byNumber[m[2]];
+    if (!side || !lig[ligAtom] || !side[protAtom]) return;
+    const a = side[protAtom], b = lig[ligAtom];
+    const d = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    bonds.push({ lab: residue + " " + protAtom + " · " + ligAtom, d: Math.round(d * 100) / 100, a, b });
+  });
+  return bonds;
+}
+
+/* ---------- loading ------------------------------------------------------ */
+function parseCSV(text) {
+  const lines = text.trim().split("\n");
+  const head = lines[0].split(",");
+  return lines.slice(1).map(line => {
+    const f = line.split(",");
+    const o = {};
+    head.forEach((h, i) => o[h] = f[i]);
+    return o;
+  });
+}
+
+async function loadRemoteIndex(base) {
+  const [manText, rrText] = await Promise.all([
+    fetch(base + "manifest.csv").then(r => { if (!r.ok) throw new Error("manifest " + r.status); return r.text(); }),
+    fetch(base + "rerank_geometry.csv").then(r => { if (!r.ok) throw new Error("rerank " + r.status); return r.text(); })
+  ]);
+  const man = {};
+  parseCSV(manText).forEach(r => man[r.design_id] = r);
+  return parseCSV(rrText).filter(r => man[r.design_id]).map(r => {
+    const m = man[r.design_id];
+    const stem = m.filename.replace(/\.cif$/, "");
+    return {
+      f: stem, v: r.variant, lin: m.lineage, adj: parseInt(m.adjustments, 10),
+      cyc: parseInt(r.cycle, 10), br: r.branch, batch: r.batch, run: r.run, id: r.design_id,
+      rk: parseInt(r.rank, 10), ork: parseInt(r.old_rank, 10), chg: parseInt(r.rank_change, 10),
+      new: r.new_score, old: r.old_score,
+      t: [r.term_confidence, r.term_hbond, r.term_planarity, r.term_cat_polarity, r.term_apolar_match],
+      off: r.offsets_A, cop: r.group_coplanarity_deg, cat: r.catalytic_residues, site: r.site_residues,
+      npc: r.n_polar_contact, npe: r.n_polar_expected, bonds: null
+    };
+  }).sort((a, b) => a.rk - b.rk);
+}
+
+async function structureText(d) {
+  if (cache.has(d.f)) return cache.get(d.f);
+  let text;
+  if (REMOTE) {
+    const r = await fetch(REMOTE + "cif/" + d.f + ".cif");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    text = await r.text();
+  } else {
+    if (!bundles.has(d.v)) {
+      if (INLINE) bundles.set(d.v, INLINE.b[d.v] || {});
+      else {
+        const r = await fetch("b/v" + d.v + ".json");
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        bundles.set(d.v, await r.json());
+      }
+    }
+    text = bundles.get(d.v)[d.f];
+    if (!text) throw new Error("not in bundle");
+  }
+  cache.set(d.f, text);
+  return text;
+}
+
+/* ---------- rendering ---------------------------------------------------- */
 function buildIndex() {
   const rows = D.filter(passAdj);
   BY = { ALL: rows.slice() };
@@ -280,20 +406,23 @@ const distHex = x => x <= 3.5 ? "#5fc38d" : (x <= 4.5 ? "#d6b45c" : "#e08268");
 const parsePairs = s => (s || "").split(";").map(x => x.trim()).filter(Boolean)
   .map(x => { const i = x.lastIndexOf("="); return [x.slice(0, i), x.slice(i + 1)]; });
 
+function renderBonds(d) {
+  rows2(document.getElementById("d-bonds"),
+    d.bonds === null ? [["measuring…", ""]]
+      : (d.bonds.length ? d.bonds.map(b => [b.lab, b.d.toFixed(2) + " Å", distClass(b.d)])
+                        : [["no bond could be resolved", "—"]]));
+}
+
 function renderReadout(d) {
   document.getElementById("d-head").textContent = d.f;
   document.getElementById("v-new").textContent = d.new;
   document.getElementById("v-old").textContent = d.old;
-  document.getElementById("r-new").textContent = "rank " + d.rk + " of 232";
-  document.getElementById("r-old").textContent = "rank " + d.ork + " of 232";
+  document.getElementById("r-new").textContent = "rank " + d.rk + " of " + D.length;
+  document.getElementById("r-old").textContent = "rank " + d.ork + " of " + D.length;
   document.getElementById("box-new").className = "scorebox" + (rankMode === "new" ? " on" : "");
   document.getElementById("box-old").className = "scorebox" + (rankMode === "old" ? " on" : "");
 
-  rows2(document.getElementById("d-bonds"),
-    (d.bonds || []).length
-      ? d.bonds.map(b => [b.lab, b.d.toFixed(2) + " Å", distClass(b.d)])
-      : [["no bond could be resolved", "—"]]);
-
+  renderBonds(d);
   rows2(document.getElementById("d-terms"), [
     ["confidence × 0.15", d.t[0]], ["h-bond × 0.30", d.t[1]], ["planarity × 0.25", d.t[2]],
     ["cat. polarity × 0.15", d.t[3]], ["apolar match × 0.15", d.t[4]],
@@ -369,25 +498,14 @@ async function select(f) {
   loading.hidden = false;
   loading.textContent = "loading " + f + "…";
   try {
-    if (!cache.has(f)) {
-      if (!bundles.has(d.v)) {
-        if (INLINE) {
-          bundles.set(d.v, INLINE.b[d.v] || {});
-        } else {
-          const r = await fetch("b/v" + d.v + ".json");
-          if (!r.ok) throw new Error("HTTP " + r.status);
-          bundles.set(d.v, await r.json());
-        }
-      }
-      const t = bundles.get(d.v)[f];
-      if (!t) throw new Error("not in bundle");
-      cache.set(f, t);
-    }
-    draw(cache.get(f), d);
+    const text = await structureText(d);
+    if (d.bonds === null) { d.bonds = measureBonds(text, d.cat); renderBonds(d); }
+    if (cur !== f) return;           // a later click won the race
+    draw(text, d);
     loading.hidden = true;
   } catch (e) {
     loading.hidden = false;
-    loading.textContent = "could not load " + f;
+    loading.textContent = "could not load " + f + " (" + e.message + ")";
   }
 }
 
@@ -414,7 +532,15 @@ function refresh() {
 
 async function boot() {
   try {
-    D = INLINE ? INLINE.designs : await fetch("designs.json").then(r => r.json());
+    if (REMOTE) {
+      loading.textContent = "fetching the design tables from GitHub…";
+      D = await loadRemoteIndex(REMOTE);
+    } else if (INLINE) {
+      D = INLINE.designs;
+    } else {
+      D = await fetch("designs.json").then(r => r.json());
+    }
+    if (!D.length) throw new Error("no designs");
     VARIANTS = [...new Set(D.map(d => d.v))].sort();
     document.getElementById("rk-new").addEventListener("click", () => { rankMode = "new";
       document.getElementById("rk-new").setAttribute("aria-pressed", "true");
@@ -432,7 +558,7 @@ async function boot() {
     renderTabs();
     selectVariant("ALL");
   } catch (e) {
-    loading.textContent = "could not load the design index";
+    loading.textContent = "could not load the design index (" + e.message + ")";
   }
 }
 boot();
