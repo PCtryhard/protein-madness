@@ -53,6 +53,10 @@ class BondMeasurement:
     angle_ideal: float
     required: bool
     atoms: dict[str, str]     # role -> resolved atom label, for the log
+    # Which geometry weight the distance term falls under. Defaults True so a
+    # caller that builds a measurement by hand keeps the old behaviour of
+    # everything counting as catalytic.
+    catalytic: bool = True
 
     def as_log_dict(self) -> dict:
         return {
@@ -62,6 +66,7 @@ class BondMeasurement:
             "angle_kind": self.angle_kind,
             "angle_ideal": self.angle_ideal,
             "required": self.required,
+            "catalytic": self.catalytic,
             "atoms": self.atoms,
         }
 
@@ -171,6 +176,7 @@ def measure_bond(
             angle_kind="acceptor_side",
             angle_ideal=float(bond.acceptor_ideal_angle),
             required=bond.required,
+            catalytic=bond.is_catalytic,
             atoms=atoms,
         )
 
@@ -184,6 +190,7 @@ def measure_bond(
         angle_kind="donor_h_acceptor",
         angle_ideal=LINEAR_DH_A,
         required=bond.required,
+        catalytic=bond.is_catalytic,
         atoms=atoms,
     )
 

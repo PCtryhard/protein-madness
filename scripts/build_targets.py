@@ -88,18 +88,53 @@ NITRO_ATOMS = {             # position 261, donates to a nitro oxygen
     "GLN": ("NE2", "CD"),
 }
 
-# Measured in the 5FQJ crystal; tests/test_variants.py asserts them.
+# THE ideal acceptor-side angles, by acceptor chemistry.
+#
+# An ideal H-bond direction is a property of the acceptor's hybridisation and
+# lone-pair geometry, not of whatever conformation a particular seed was
+# modelled in. So this table OVERRIDES both a measured seed angle and the 5FQJ
+# crystal value. Before, a measured value won whenever the seed's distance
+# looked plausible, which installed e.g. 113.5 deg for variant 02's
+# carboxylate -- a sidechain that had been moved without repacking.
+#
+# Matched by atom suffix, so it holds for any residue number.
+ACCEPTOR_GEOMETRY = {
+    # ligand triazole nitrogens, 2-coordinate; internal angles 107-110 deg
+    "lig_n1": (126.4, "triazole N, 2-coord"),
+    "lig_n2": (124.8, "triazole N, 2-coord"),
+    "lig_n3": (126.3, "triazole N, 2-coord"),
+    # ligand nitro oxygens, sp2
+    "lig_o11": (120.0, "nitro O, sp2"),
+    "lig_o21": (120.0, "nitro O, sp2"),
+}
+# Protein sidechain acceptors, matched on the atom name alone.
+SIDECHAIN_ACCEPTOR_GEOMETRY = {
+    "OD1": (120.0, "carboxylate, sp2"),     # ASP
+    "OD2": (120.0, "carboxylate, sp2"),     # ASP
+    "OE1": (120.0, "carboxylate, sp2"),     # GLU
+    "OE2": (120.0, "carboxylate, sp2"),     # GLU
+    "ND1": (126.0, "imidazole N, 2-coord"), # HIS as acceptor
+    "NE2": (126.0, "imidazole N, 2-coord"), # HIS as acceptor
+}
+
+# Kept only to say "the seed disagrees with the crystal" in the report. These
+# are no longer a source of ideals.
 CRYSTAL_ANGLES = {
-    # (acceptor description) -> degrees
     "asp229_od2": 106.6,    # CG-OD2...N3, ASP229 is unmutated in 5FQJ
-    "lig_n1": 126.6,        # N2-N1...NE2; the acceptor is a ligand atom, so
-                            # this holds whichever residue donates to it
+    "lig_n1": 126.6,        # N2-N1...NE2
 }
-# Hybridisation values, used only where nothing measured supports a number.
-CHEMISTRY_ANGLES = {
-    "glu229_oe2": 120.0,    # sp2 carboxylate
-    "lig_o11": 120.0,       # sp2 nitro oxygen
-}
+
+
+def acceptor_ideal(acceptor_key: str, acceptor_atom: str):
+    """(ideal degrees, why) for an acceptor, or None if we have no chemistry.
+
+    Returning None rather than guessing: a bond whose acceptor this script
+    does not know is a bond whose ideal nobody can defend, and generating a
+    target with a stand-in number would hide that.
+    """
+    if acceptor_key in ACCEPTOR_GEOMETRY:
+        return ACCEPTOR_GEOMETRY[acceptor_key]
+    return SIDECHAIN_ACCEPTOR_GEOMETRY.get(acceptor_atom.upper())
 
 # A directional hydrogen bond measured at the acceptor lies in this range.
 # Outside it, a "measured" ideal is more likely a modelling artefact than a
@@ -330,45 +365,43 @@ def measure(plans: list[BondPlan], pdb: Path, clash: float, tolerated: float) ->
         # above zero: between the clash gate and `tolerated`, which is where
         # the distance term reaches 0. A 3.9 A contact sits inside the 4.5 A
         # fail gate but scores zero, so its angle is not a target either.
+        geometry = acceptor_ideal(plan.acceptor_key, plan.acceptor_atom)
+        if geometry is None:
+            raise SystemExit(
+                f"{pdb}: bond {plan.bond_id} accepts at {plan.acceptor_atom!r}, "
+                "which is not in ACCEPTOR_GEOMETRY or "
+                "SIDECHAIN_ACCEPTOR_GEOMETRY in this script. Add its ideal "
+                "acceptor-side angle there rather than letting a target be "
+                "generated with an undefensible number."
+            )
+        plan.ideal, kind = geometry
+        plan.source = "chemistry"
+
+        notes = [f"{kind}"]
         plausible = clash < plan.distance < tolerated
-        if plausible:
-            plan.ideal = round(plan.measured_angle, 1)
-            plan.source = "measured"
-            notes = []
-            # A directional H-bond at the acceptor sits well above 90 deg. Below
-            # that the donor is approaching edge-on to the acceptor's
-            # antecedent bond, which is not a geometry to aim for -- it usually
-            # means the sidechain was moved without being repacked.
-            if not ANGLE_SANE_MIN <= plan.measured_angle <= ANGLE_SANE_MAX:
-                notes.append(
-                    f"SUSPICIOUS: {plan.measured_angle:.1f} deg is outside "
-                    f"{ANGLE_SANE_MIN}-{ANGLE_SANE_MAX} deg, which is not a "
-                    "plausible acceptor-side H-bond direction. The distance is "
-                    "fine, so the sidechain was probably moved without being "
-                    "repacked. Check this refold before running on it"
-                )
-            crystal = CRYSTAL_ANGLES.get(plan.acceptor_key)
-            if crystal is not None and abs(plan.ideal - crystal) > 5.0:
-                notes.append(
-                    f"differs from the 5FQJ crystal value {crystal} deg by "
-                    f"{abs(plan.ideal - crystal):.1f} deg -- check the refold"
-                )
-            plan.note = "; ".join(notes)
-        elif plan.acceptor_key in CRYSTAL_ANGLES:
-            plan.ideal = CRYSTAL_ANGLES[plan.acceptor_key]
-            plan.source = "crystal"
-            plan.note = (
-                f"seed distance {plan.distance:.3f} A is outside "
-                f"{clash}-{tolerated} A, so the seed's own angle is not a target"
+        # The measured angle no longer sets the ideal, but it is still the best
+        # evidence about whether a seed was repacked, so keep reporting it.
+        if plausible and not (ANGLE_SANE_MIN <= plan.measured_angle <= ANGLE_SANE_MAX):
+            notes.append(
+                f"SUSPICIOUS: the seed measures {plan.measured_angle:.1f} deg, "
+                f"outside {ANGLE_SANE_MIN}-{ANGLE_SANE_MAX} deg, which is not a "
+                "plausible acceptor-side H-bond direction. The distance is "
+                "fine, so the sidechain was probably moved without being "
+                "repacked. Check this refold before running on it"
             )
-        else:
-            plan.ideal = CHEMISTRY_ANGLES[plan.acceptor_key]
-            plan.source = "chemistry"
-            plan.note = (
-                f"seed distance {plan.distance:.3f} A is outside "
-                f"{clash}-{tolerated} A and there is no crystal value for this "
-                "acceptor, so nothing measured supports this ideal"
+        elif not plausible:
+            notes.append(
+                f"the seed's own contact is {plan.distance:.3f} A, outside "
+                f"{clash}-{tolerated} A, so it is not evidence either way"
             )
+        crystal = CRYSTAL_ANGLES.get(plan.acceptor_key)
+        if crystal is not None and abs(plan.ideal - crystal) > 5.0:
+            notes.append(
+                f"the 5FQJ crystal measures {crystal} deg here; the chemistry "
+                f"value is used in preference, a {abs(plan.ideal - crystal):.1f} "
+                "deg difference"
+            )
+        plan.note = "; ".join(notes)
 
 
 def unusable_bonds(plans: list[BondPlan]) -> list[BondPlan]:
@@ -390,17 +423,12 @@ def unusable_bonds(plans: list[BondPlan]) -> list[BondPlan]:
 def render(variant: str, label: str, pdb: Path, residues: dict[int, str],
            plans: list[BondPlan]) -> str:
     positions = sorted(residues)
-    sources = {p.source for p in plans}
-    if sources == {"measured"}:
-        provenance = "Every ideal angle below was MEASURED in this seed."
-    else:
-        provenance = (
-            "Some ideal angles below are NOT measured in this seed, because the "
-            "seed's\n# own geometry for those bonds is not a plausible hydrogen "
-            "bond. The `from:`\n# note on each one says where its value came "
-            "from. Re-run\n# scripts/build_targets.py after replacing the seed "
-            "with a repacked one."
-        )
+    provenance = (
+        "Every ideal angle below comes from the ACCEPTOR'S CHEMISTRY -- its\n"
+        "# hybridisation and lone-pair geometry -- not from this seed. See\n"
+        "# ACCEPTOR_GEOMETRY in scripts/build_targets.py. The seed's own measured\n"
+        "# angle is reported alongside as evidence about the seed, not as a target."
+    )
 
     lines = [
         f"# Variant {variant}: {label}",
@@ -665,7 +693,9 @@ def main() -> int:
         print(header)
         print("-" * (len(header) + 20))
         for variant, plan in rows:
-            flag = "" if plan.source == "measured" else "  <-- not measured"
+            # The measured angle is evidence about the seed, not the target.
+            off = abs(plan.measured_angle - plan.ideal)
+            flag = f"  seed off by {off:>5.1f}" if off > 15.0 else ""
             print(f"{variant:<8} {plan.bond_id:<30} {plan.distance:>7.3f} "
                   f"{plan.measured_angle:>7.1f} {plan.ideal:>7.1f}  "
                   f"{plan.source:<10}{flag}")
@@ -690,28 +720,28 @@ def main() -> int:
         print(f"  {total} bonds across {len({v for v, _ in rows})} variants: "
               + ", ".join(f"{n} {source}" for source, n in sorted(counts.items())))
 
-        not_measured = total - counts.get("measured", 0)
-        if not_measured:
+        far = [(v, p) for v, p in rows
+               if abs(p.measured_angle - p.ideal) > 15.0]
+        if far:
             print()
-            print(f"  {not_measured} of {total} ideal angles are NOT measured in "
-                  "their seed, because")
-            print("  the seed's geometry for those bonds is not a plausible "
-                  f"hydrogen bond ({distance.clash}-{distance.tolerated} A).")
-            print("  That is expected for the shipped motif files, whose mutations "
-                  "were modelled")
-            print("  in without repacking. Replace a seed with a repacked one and "
-                  "re-run this")
-            print("  script: the affected bonds will switch to `measured` on their own.")
+            print(f"  {len(far)} of {total} seeds sit more than 15 deg off the "
+                  "ideal for their")
+            print("  acceptor. That does not change the target -- the ideal is a "
+                  "property of the")
+            print("  acceptor's chemistry -- but a seed that far out is a seed "
+                  "whose sidechain")
+            print("  was probably modelled in without repacking, so the design "
+                  "starts from a")
+            print("  geometry it then has to recover.")
             if args.verbose:
                 print()
-                for variant, plan in rows:
-                    if plan.source != "measured":
-                        print(f"    {variant} {plan.bond_id}: {plan.note}")
+                for variant, plan in far:
+                    print(f"    {variant} {plan.bond_id}: seed "
+                          f"{plan.measured_angle:.1f} deg vs ideal "
+                          f"{plan.ideal:.1f} deg")
         else:
             print()
-            print("  All ideal angles are measured in their seeds. Nothing is "
-                  "standing in for")
-            print("  a number nobody checked.")
+            print("  Every seed is within 15 deg of its acceptor's ideal angle.")
         print()
 
     if unusable:

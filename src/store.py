@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS designs (
   score            REAL,
   term_confidence  REAL,
   term_distance    REAL,
+  term_catalytic   REAL,
+  term_non_catalytic REAL,
   term_angle       REAL,
   gated            INTEGER DEFAULT 0,
   status           TEXT NOT NULL,      -- scored | gated | errored
@@ -110,6 +112,8 @@ class DesignRow:
     score: float | None = None
     term_confidence: float | None = None
     term_distance: float | None = None
+    term_catalytic: float | None = None
+    term_non_catalytic: float | None = None
     term_angle: float | None = None
     gated: bool = False
     error: str | None = None
@@ -188,14 +192,16 @@ class DesignStore:
                     INSERT INTO designs (
                       design_id, parent_id, scaffold_id, cycle, branch, mutation,
                       sequence, seq_hash, score, term_confidence, term_distance,
+                      term_catalytic, term_non_catalytic,
                       term_angle, gated, status, error, hbond_raw, extra_metrics,
                       provenance, structure_path, backbone_path, created_at
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         row.design_id, row.parent_id, row.scaffold_id, row.cycle,
                         row.branch, row.mutation, row.sequence, row.seq_hash,
                         row.score, row.term_confidence, row.term_distance,
+                        row.term_catalytic, row.term_non_catalytic,
                         row.term_angle, int(row.gated), row.status, row.error,
                         row.hbond_raw, row.extra_metrics, row.provenance,
                         row.structure_path, row.backbone_path, created,

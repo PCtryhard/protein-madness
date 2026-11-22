@@ -128,17 +128,21 @@ def test_total_is_the_weighted_sum_from_the_spec(cfg, stretched):
     scoring = cfg.pipeline.scoring
     score = combine(0.5, measure(cfg, stretched), scoring)
 
-    geometry = (
-        scoring.geometry_weights.distance * SIXTH
-        + scoring.geometry_weights.angle * SIXTH
-    )
+    gw = scoring.geometry_weights
+    # This fixture's bonds are all catalytic, so the non_catalytic weight has
+    # nothing to score and the rest renormalise over what is present.
+    live = gw.catalytic + gw.angle
+    geometry = (gw.catalytic * SIXTH + gw.angle * SIXTH) / live
     expected = (
         scoring.weights.confidence * 0.5 + scoring.weights.geometry * geometry
     )
     assert score.geometry == pytest.approx(geometry, abs=TERM_TOL)
     assert score.total == pytest.approx(expected, abs=TERM_TOL)
-    # with the shipped 0.7/0.3 and 0.6/0.4: 0.7*0.5 + 0.3*(1/6) = 0.4
-    assert score.total == pytest.approx(0.4, abs=TERM_TOL)
+    # Every present term is SIXTH, so renormalising leaves geometry at SIXTH
+    # whatever the split: 0.5*0.5 + 0.5*(1/6) = 0.3333
+    assert score.geometry == pytest.approx(SIXTH, abs=TERM_TOL)
+    assert score.total == pytest.approx(0.25 + 0.5 * SIXTH, abs=TERM_TOL)
+    assert score.non_catalytic is None
 
 
 def test_confidence_outside_unit_interval_is_rejected(cfg, ideal):
