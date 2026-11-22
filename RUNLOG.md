@@ -448,6 +448,158 @@ out of git history.
 
 ---
 
+## 16. Three search cycles instead of one — Euler 21899142…21899152 ✅
+
+The §15 batch found that `max_cycles: 1` starves the search: `wiggle` and
+`mutate` only spawn from a parent that cleared the gate, so a variant whose
+cycle 0 produced nothing got no search at all and degenerated into plain
+random sampling. This batch tests the fix.
+
+Two parameters moved from the §15 config, and only two:
+
+| | §15 overnight | §16 depth |
+|---|---|---|
+| `run.max_cycles` | 1 | **3** |
+| `boltz.recycling_steps` | 5 | **3** |
+
+Recycles came down to pay for the extra cycles. §15 had already measured them
+as neutral, and this batch re-measures that properly (see below). Everything
+else — 20 backbones, 3 sequences each, `keep_per_cycle: 2`, `partial_t: 2.0` —
+is unchanged. Variants 04 and 12 were dropped: neither scored a single design
+in §15, so they had nothing to search from.
+
+11 jobs, all `COMPLETED`, longest 1:48 against a 2:05 wall. 1,122 designs,
+142 scored (12.7%), against 830 designs and 63 scored (7.6%) for the same 11
+variants in §15.
+
+### Cycles 2 and 3 do run
+
+This was the untested part: at cycle 2 the `wiggle` branch uses a *wiggle
+child* as its parent, a code path no previous run had exercised. It works.
+Variant 06's cycle 2 wiggled from `c01.mutate.995a1f` — a search child used as
+a parent — and produced scoring designs.
+
+Three variants (03, 06, 07) stopped after cycle 2 rather than running all
+three. That is the early-stop rule firing correctly: `no improvement above
+min_delta=0.005 for 2 consecutive cycles`. Those three are also exactly the
+three whose best design came from cycle 0, so the rule stopped runs that had
+genuinely stalled. Nothing was truncated by the wall clock.
+
+### The branch rates are the finding
+
+Pooled over all 1,122 designs, by how the design was generated:
+
+| branch | designs | cleared gate | rate |
+|---|---|---|---|
+| `seed` (fresh RFD3) | 660 | 41 | **6.2%** |
+| `wiggle` (partial re-diffusion) | 342 | 50 | **14.6%** |
+| `mutate` (new sequence, same backbone) | 120 | 51 | **42.5%** |
+
+Search children clear the gate at 21.9% against 6.2% for random seeds —
+Fisher p ≈ 1.5 × 10⁻¹⁴. `mutate` beats `wiggle` at p ≈ 1.3 × 10⁻⁹. The
+ordering replicates: in §15 the same three branches ran 5.5% / 12.7% / 25.0%,
+with `mutate` on only 44 designs. Pooling the two batches, `mutate`'s
+advantage is not a small-sample artefact.
+
+By cycle, the enrichment appears immediately and does not decay:
+
+| cycle | designs | scored | rate |
+|---|---|---|---|
+| 0 | 660 | 41 | 6.2% |
+| 1 | 158 | 35 | 22.2% |
+| 2 | 176 | 33 | 18.8% |
+| 3 | 128 | 33 | 25.8% |
+
+Six of the 11 variants found their best design in cycle 2 or 3 — designs that
+could not exist under `max_cycles: 1`.
+
+### `mutate` is starved, and that is the next lever
+
+Observed in every cycle of every variant: `mutate` produced **exactly 4
+designs per cycle** whether the frontier held one parent or two, while
+`wiggle` scaled 6 → 12 with the parent count. So `mutate` takes 4 of a full
+cycle's 16 designs (25%) and returns 51 of the batch's 142 hits (36%) from 11%
+of the designs. It is also the cheapest branch — no re-diffusion, just
+LigandMPNN and Boltz on an existing backbone.
+
+Raising `mutate`'s share is the highest-confidence change available to the
+next run, and it shifts budget from the 6.2% branch to the 42.5% one.
+
+### Recycles 5 → 3: now a controlled measurement
+
+Cycle 0 is identical in shape between §15 and §16 — 20 backbones × 3
+sequences, same 11 variants, 660 designs on each side — and `recycling_steps`
+is the only parameter that differs. That makes this a clean A/B, far larger
+than the §15 attempt:
+
+| `recycling_steps` | cycle-0 designs | scored | rate |
+|---|---|---|---|
+| 5 (§15) | 660 | 36 | 5.5% |
+| 3 (§16) | 660 | 41 | 6.2% |
+
+Fisher p = 0.64. Recycles are neutral for gate-clearing, and dropping them
+bought roughly 30% more wall clock for free. **Do not spend time tuning
+`recycling_steps`.**
+
+### Depth raised the floor, not the ceiling
+
+| variant | §15 best | §16 best | Δ | scored §15 → §16 |
+|---|---|---|---|---|
+| 11 | 0.7026 | **0.8373** | +0.135 | 8/76 → **24/108** |
+| 03 | 0.8059 | 0.8323 | +0.026 | 5/76 → 9/92 |
+| 01 | 0.8296 | 0.8187 | −0.011 | 10/76 → 12/108 |
+| 08 | 0.6655 | 0.8007 | +0.135 | 4/76 → 17/108 |
+| 10 | **0.8988** | 0.7951 | −0.104 | 3/76 → 16/108 |
+| 06 | 0.7286 | 0.7762 | +0.048 | 9/76 → 14/92 |
+| 13 | 0.5333 | 0.7672 | +0.234 | 6/76 → 15/102 |
+| 09 | 0.8065 | 0.6863 | −0.120 | 8/76 → 11/102 |
+| 05 | 0.6061 | 0.6780 | +0.072 | 5/76 → 14/108 |
+| 02 | 0.2254 | 0.6716 | +0.446 | 1/70 → 8/102 |
+| 07 | 0.7249 | 0.5735 | −0.151 | 4/76 → 2/92 |
+
+Best score improved in 7 of 11; the number of designs clearing the gate
+improved in 10 of 11. But **the single best design did not improve**: §15's
+variant 10 at 0.8988 still leads, and §16's best is 0.8373.
+
+Best of this batch, `11.c03.wiggle.7b5b29`, descended from a cycle-2 wiggle
+child:
+
+| | |
+|---|---|
+| score | 0.8373 |
+| confidence / catalytic / non-catalytic / angle | 0.844 / 0.820 / 0.952 / 0.767 |
+| GLU229 OE2···N3 | 2.22 Å, 122.8° |
+| HIS291 NE2···N1 | 2.72 Å, 89.7° |
+| ASN261 ND2···O11 | 2.79 Å, 117.6° |
+| iptm / complex pLDDT | 0.880 / 0.822 |
+
+### Variant 10's crown was a lucky draw
+
+§15 ranked variant 10 first on 0.8988 from **3 scored designs out of 76**.
+Given 108 designs and 16 hits here — five times the sample — it topped out at
+0.7951. This is the second time a §15-era leader has failed to reproduce; §15
+itself retracted variant 12's 0.8653 for the same reason.
+
+**The overnight top-3 was selection on small samples and should not be used to
+pick variants.** Across both batches the variants that reproduce are **11, 03
+and 01**. Variant 11 has both the top §16 score and the best hit rate (24/108,
+22%), and is the defensible first pick if the next step is to narrow and go
+deep.
+
+### Caveat
+
+Two parameters moved together, so depth-versus-breadth is strictly a joint
+test. The cycle-0 slice isolates recycles cleanly and shows them neutral,
+which is what licenses attributing the rest to the extra cycles — but that is
+an inference from one controlled slice, not a second controlled experiment.
+
+Committed here: the 11 leaderboards, config snapshots, and RFD3 / LigandMPNN /
+Boltz-2 artefacts for the 142 scored designs — 1,652 files, 28 MB. The gated
+designs stay on Euler under `~/pm-live/runs/depth-NN/`; they are regenerable
+and were deliberately kept out of git history.
+
+---
+
 ## Open and unresolved
 
 | | State |
