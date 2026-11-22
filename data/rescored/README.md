@@ -15,7 +15,7 @@ costs no GPU and is reproducible.
 | `cif/` | 232 predicted complexes, renamed (scheme below) |
 | `manifest.csv` | one row per file: new name, original `design_id`, run, lineage, scores |
 | `rerank_geometry.csv` | the re-rank table, 232 rows |
-| `rerank_geometry.json` | same, as JSON |
+| `rerank_geometry.json` | run metadata: the weights, the module constants, and the wildtype reference check (not the table) |
 | `rerank_round2.html` | standalone browsable leaderboard, opens offline |
 | `rerank_legacy_layout.patch` | the one-function fix the run depended on, NOT applied to `scripts/` |
 
@@ -90,6 +90,30 @@ instead of `0.732`, scoring 0.778 instead of 0.717 and placing about third.
 `0.6 * distance + 0.4 * angle` at that run's own weights. It is recorded here
 for reproducibility and is **not** applied to `scripts/rerank_geometry.py` —
 apply it there before re-running if you want these numbers back.
+
+## The wildtype scores worse than the best design
+
+`rerank_geometry.json` records a consistency check against the wildtype fold
+(`data/01/inputs/fold_wildtype_ligand_model_0.cif`). It comes out at
+
+| term | wildtype | best design (`01_s_95cdcf`) |
+| --- | --- | --- |
+| planarity | 0.607 | 0.780 |
+| cat_polarity | 0.940 | 0.84 |
+| apolar_match | 0.900 | 0.78 |
+
+The wildtype's own His263 to ligand-N1 contact is 3.77 A long and sits 2.35 A
+out of the ring plane, which is why its planarity term is only 0.61. So the
+top design scores *above* the reference on the term that did most of the
+reshuffling.
+
+Read that as a caution about the term, not a result about the design. Either
+the planarity penalty is harsher than real enzymes require, or this reference
+is not a fair yardstick: it is a Boltz fold of the wildtype rather than the
+crystal structure. The file's own caveat also notes that `cat_polarity` was
+revised after this reference was inspected, which makes it a consistency
+check and not a validation. Worth settling against the 5FQJ crystal geometry
+before anyone treats the absolute values as meaningful.
 
 ## Known limits
 
