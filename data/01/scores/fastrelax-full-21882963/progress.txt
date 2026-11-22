@@ -1,0 +1,13 @@
+run      : fastrelax-full
+target   : 01_fastrelax
+started  : 2026-11-21T23:16:20+00:00
+updated  : 2026-11-22T00:10:55+00:00
+elapsed  : 0h 54m 34s
+
+designs  : 46
+  scored  : 1
+  gated   : 45
+
+best     : 0.5608  01_fastrelax.01.c00.seed.e74a29
+
+rate     : 1.2 min/design (51 designs/hour)

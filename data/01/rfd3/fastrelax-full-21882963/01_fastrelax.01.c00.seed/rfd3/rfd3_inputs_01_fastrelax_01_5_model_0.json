@@ -1,0 +1,67 @@
+{
+    "diffused_index_map": {
+        "A229": "A43",
+        "A291": "A239"
+    },
+    "metrics": {
+        "join_point_rmsd_by_token": {
+            "A229": 0.46744871139526367,
+            "A291": 1.0269287824630737
+        },
+        "insertion.mae": 1.5246408581733704,
+        "insertion.rmcd": 1.1304157078266144,
+        "insertion_rmsd": 1.150960087776184,
+        "join_point_rmsd": 0.7471887469291687,
+        "n_conjoined_residues": 0,
+        "max_ca_deviation": 0.08075857162475586,
+        "n_chainbreaks": 0,
+        "n_clashing.interresidue_clashes_w_sidechain": 0,
+        "n_clashing.interresidue_clashes_w_backbone": 0,
+        "n_clashing.ligand_clashes": 0,
+        "n_clashing.ligand_min_distance": 2.710972785949707,
+        "non_loop_fraction": 0.6384615384615384,
+        "loop_fraction": 0.36153846153846153,
+        "helix_fraction": 0.4115384615384615,
+        "sheet_fraction": 0.22692307692307692,
+        "num_ss_elements": 17,
+        "radius_of_gyration": 15.938378023654975,
+        "alanine_content": 0.3384615384615385,
+        "glycine_content": 0.09230769230769231,
+        "num_residues": 260,
+        "diffused_com": [
+            -2.0888378620147705,
+            -4.027812957763672,
+            1.2905958890914917
+        ],
+        "fixed_com": [
+            -0.00016954209422692657,
+            -5.425347262644209e-05,
+            -0.0004340277810115367
+        ]
+    },
+    "specification": {
+        "input": "/cluster/home/malexandrov/pm-fastrelax/data/01/inputs/01_fastrelax_motif.pdb",
+        "contig": "260-260",
+        "unindex": "A229,A291",
+        "ligand": "6NT",
+        "extra": {
+            "example": "01_fastrelax_01",
+            "task_name": "rfd3_inputs_01_fastrelax_01",
+            "sampled_contig": "260P",
+            "num_tokens_in": 263,
+            "num_residues_in": 263,
+            "num_chains": 2,
+            "num_atoms": 1318,
+            "num_residues": 264,
+            "example_id": "rfd3_inputs_01_fastrelax_01_5"
+        },
+        "select_fixed_atoms": {
+            "A229": "OD1,CG,OD2",
+            "A291": "CD2,CE1,NE2",
+            "6NT": "ALL"
+        },
+        "select_unfixed_sequence": false
+    },
+    "ckpt_path": "/cluster/scratch/malexandrov/pdh/weights/rfd3/rfd3_latest.ckpt",
+    "seed": 1
+}

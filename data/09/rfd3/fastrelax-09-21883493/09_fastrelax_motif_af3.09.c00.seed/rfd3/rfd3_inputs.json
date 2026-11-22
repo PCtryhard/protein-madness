@@ -1,0 +1,14 @@
+{
+  "09_fastrelax_motif_af3_09": {
+    "input": "/cluster/home/malexandrov/pm-fastrelax/data/09/inputs/09_fastrelax_motif_af3.pdb",
+    "unindex": "A229,A261,A291",
+    "select_fixed_atoms": {
+      "A229": "OD1,CG,OD2",
+      "A261": "OD1,CG,ND2",
+      "A291": "OD1,CG,ND2",
+      "6NT": "ALL"
+    },
+    "contig": "260-260",
+    "ligand": "6NT"
+  }
+}

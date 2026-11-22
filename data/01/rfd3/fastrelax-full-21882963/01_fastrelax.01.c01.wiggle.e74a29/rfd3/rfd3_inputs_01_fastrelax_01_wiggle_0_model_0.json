@@ -1,0 +1,66 @@
+{
+    "diffused_index_map": {
+        "A78": "A78",
+        "A159": "A159"
+    },
+    "metrics": {
+        "join_point_rmsd_by_token": {
+            "A78": 0.0,
+            "A159": 0.0
+        },
+        "insertion.mae": 0.0,
+        "insertion.rmcd": 0.0,
+        "insertion_rmsd": 0.0,
+        "join_point_rmsd": 0.0,
+        "n_conjoined_residues": 0,
+        "max_ca_deviation": 0.08473658561706543,
+        "n_chainbreaks": 0,
+        "n_clashing.interresidue_clashes_w_sidechain": 0,
+        "n_clashing.interresidue_clashes_w_backbone": 0,
+        "n_clashing.ligand_clashes": 0,
+        "n_clashing.ligand_min_distance": 3.879774808883667,
+        "non_loop_fraction": 0.6461538461538462,
+        "loop_fraction": 0.35384615384615387,
+        "helix_fraction": 0.45,
+        "sheet_fraction": 0.19615384615384615,
+        "num_ss_elements": 16,
+        "radius_of_gyration": 16.217332209435597,
+        "alanine_content": 0.38461538461538464,
+        "glycine_content": 0.06538461538461539,
+        "num_residues": 260,
+        "diffused_com": [
+            0.009529845789074898,
+            -0.4969802498817444,
+            -0.002754801418632269
+        ],
+        "fixed_com": [
+            -3.9826388359069824,
+            0.0361870676279068,
+            3.090928792953491
+        ]
+    },
+    "specification": {
+        "input": "/cluster/home/malexandrov/pm-fastrelax/runs/fastrelax-full/structures/01_fastrelax.01.c00.seed/rfd3/rfd3_inputs_01_fastrelax_01_1_model_0.pdb",
+        "unindex": "A78,A159",
+        "ligand": "6NT",
+        "extra": {
+            "example": "01_fastrelax_01_wiggle",
+            "task_name": "rfd3_inputs_01_fastrelax_01_wiggle",
+            "num_tokens_in": 263,
+            "num_residues_in": 263,
+            "num_chains": 2,
+            "num_atoms": 1697,
+            "num_residues": 264,
+            "example_id": "rfd3_inputs_01_fastrelax_01_wiggle_0"
+        },
+        "select_fixed_atoms": {
+            "6NT": "ALL",
+            "A78": "OD1,CG,OD2",
+            "A159": "CD2,CE1,NE2"
+        },
+        "select_unfixed_sequence": false,
+        "partial_t": 2.0
+    },
+    "ckpt_path": "/cluster/scratch/malexandrov/pdh/weights/rfd3/rfd3_latest.ckpt",
+    "seed": 1
+}
