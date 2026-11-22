@@ -67,13 +67,17 @@ def cmd_smoke(args: argparse.Namespace) -> int:
     print(f"angle rule      : {rule}")
     print(f"protonation     : {cfg.pipeline.protonation.engine}"
           f"{' (skipped: not needed by this rule)' if rule == 'acceptor_side_always' else ''}")
+    gw = cfg.pipeline.scoring.geometry_weights
     print(f"score weights   : confidence {cfg.pipeline.scoring.weights.confidence}, "
           f"geometry {cfg.pipeline.scoring.weights.geometry} "
-          f"(distance {cfg.pipeline.scoring.geometry_weights.distance}, "
-          f"angle {cfg.pipeline.scoring.geometry_weights.angle})")
+          f"(catalytic {gw.catalytic}, non-catalytic {gw.non_catalytic}, "
+          f"angle {gw.angle})")
     print(f"aggregate       : {cfg.pipeline.scoring.aggregate}")
-    print(f"gate            : required bond beyond "
-          f"{cfg.pipeline.scoring.distance.fail} A zeroes the design")
+    dist = cfg.pipeline.scoring.distance
+    print(f"gate            : required bond beyond {dist.fail} A, or closer "
+          f"than {dist.clash} A, zeroes the design")
+    print(f"distance term   : 1.0 at {dist.ideal} A, falling to 0 at "
+          f"{dist.clash} A below and {dist.tolerated} A above")
     print(f"max tokens      : {cfg.pipeline.boltz.max_tokens}")
     print(f"gpus            : {cfg.pipeline.run.gpus}")
     print()

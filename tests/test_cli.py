@@ -45,3 +45,50 @@ def test_every_subcommand_parses_and_takes_verbose(argv):
     parser = build_parser()
     assert parser.parse_args(argv).func is not None
     assert parser.parse_args(argv + ["-v"]).verbose
+
+
+# --------------------------------------------------------------------------
+# smoke actually RUNNING, not just parsing
+# --------------------------------------------------------------------------
+
+
+def test_smoke_runs_and_prints_the_live_scoring_settings(capsys):
+    """Execute cmd_smoke, do not merely parse its arguments.
+
+    This file only ever checked argument handling, so when the scoring config
+    was restructured and `cmd_smoke` kept printing a field that no longer
+    existed, every test passed and the failure surfaced as an
+    `AttributeError` 45 seconds into a submitted job -- which is the exact
+    class of regression this module was written to stop.
+
+    Asserting on the printed values rather than just a clean exit, because a
+    smoke check that prints stale settings is worse than one that crashes:
+    it tells you the run is configured in a way it is not.
+    """
+    from src.cli import build_parser, cmd_smoke
+
+    args = build_parser().parse_args(["smoke", "--target", REAL_TARGET])
+    assert cmd_smoke(args) == 0
+
+    out = capsys.readouterr().out
+    assert "SMOKE TEST PASSED" in out
+    # the three geometry weights, by their current names
+    assert "catalytic" in out
+    assert "non-catalytic" in out
+    # both ends of the gate, so a one-sided report cannot creep back
+    assert "4.5 A" in out
+    assert "0.5 A" in out
+
+
+def test_smoke_reports_both_sides_of_the_distance_term(capsys):
+    """The term is asymmetric; a reader needs both spans to interpret a score."""
+    from src.cli import build_parser, cmd_smoke
+
+    args = build_parser().parse_args(["smoke", "--target", REAL_TARGET])
+    cmd_smoke(args)
+    out = capsys.readouterr().out
+
+    line = next(l for l in out.splitlines() if l.startswith("distance term"))
+    assert "2.9 A" in line      # full marks
+    assert "0.5 A" in line      # zero below
+    assert "4.5 A" in line      # zero above
