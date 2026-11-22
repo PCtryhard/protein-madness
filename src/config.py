@@ -247,16 +247,26 @@ class ConfidenceCfg(Strict):
 
 
 class DistanceCfg(Strict):
+    """The distance metric spans clash..fail, and only penalises stretching.
+
+    `ideal` is now the distance at and BELOW which a bond scores full marks,
+    not a point to sit exactly on. `tolerated` is where the term reaches zero,
+    and `clash` is the only short-side penalty -- it gates rather than shading
+    the term.
+    """
+
     ideal: Positive = 2.9
-    tolerated: Positive = 3.5
+    tolerated: Positive = 4.5
     fail: Positive = 4.5
-    clash: Positive = 2.2
+    clash: Positive = 0.5
 
     @model_validator(mode="after")
     def _ordered(self) -> DistanceCfg:
-        if not self.clash < self.ideal < self.tolerated < self.fail:
+        # `tolerated` may now equal `fail`: the term reaching zero exactly
+        # where the gate fires is the intended shape, not a mistake.
+        if not self.clash < self.ideal <= self.tolerated <= self.fail:
             raise ValueError(
-                "scoring.distance must satisfy clash < ideal < tolerated < fail, got "
+                "scoring.distance must satisfy clash < ideal <= tolerated <= fail, got "
                 f"clash={self.clash}, ideal={self.ideal}, "
                 f"tolerated={self.tolerated}, fail={self.fail}"
             )

@@ -80,22 +80,34 @@ def test_mixed_fixture_differs_between_its_two_bonds(cfg, mixed):
 
 def test_distance_term_hand_values(pipeline):
     cfg = pipeline.scoring.distance
+    # Full marks at the ideal AND anywhere below it.
     assert distance_term(2.900, cfg) == pytest.approx(1.0)
-    assert distance_term(3.400, cfg) == pytest.approx(SIXTH)
-    # symmetric about the ideal: a 2.4 A clash scores the same as a 3.4 A stretch
-    assert distance_term(2.400, cfg) == pytest.approx(SIXTH)
-    # at and beyond the tolerance it is zero, never negative
-    assert distance_term(3.500, cfg) == pytest.approx(0.0)
+    assert distance_term(2.400, cfg) == pytest.approx(1.0)
+    assert distance_term(1.000, cfg) == pytest.approx(1.0)
+    assert distance_term(0.500, cfg) == pytest.approx(1.0)
+    # Only stretching costs anything: linear from ideal to tolerated.
+    assert distance_term(3.400, cfg) == pytest.approx(0.6875)
+    assert distance_term(4.000, cfg) == pytest.approx(0.3125)
+    # At and beyond the tolerance it is zero, never negative.
+    assert distance_term(4.500, cfg) == pytest.approx(0.0)
     assert distance_term(9.000, cfg) == 0.0
-    assert distance_term(0.100, cfg) == 0.0
 
 
-def test_distance_term_is_symmetric(pipeline):
+def test_distance_term_does_not_penalise_a_close_contact(pipeline):
+    """A close hydrogen bond is not a worse hydrogen bond.
+
+    The term used to be symmetric about the ideal, so 2.4 A scored the same as
+    3.4 A. Now the short side is flat: the only short-distance penalty is the
+    clash gate, which rejects outright rather than shading the score.
+    """
     cfg = pipeline.scoring.distance
-    for delta in (0.0, 0.1, 0.25, 0.4, 0.6, 1.0):
-        assert distance_term(cfg.ideal + delta, cfg) == pytest.approx(
-            distance_term(cfg.ideal - delta, cfg)
-        )
+    for delta in (0.0, 0.1, 0.25, 0.4, 0.6, 1.0, 2.0):
+        short = cfg.ideal - delta
+        if short < cfg.clash:
+            continue
+        assert distance_term(short, cfg) == pytest.approx(1.0)
+    # and the long side still decays
+    assert distance_term(cfg.ideal + 0.5, cfg) < 1.0
 
 
 def test_angle_term_hand_values(pipeline):
@@ -132,16 +144,15 @@ def test_total_is_the_weighted_sum_from_the_spec(cfg, stretched):
     # This fixture's bonds are all catalytic, so the non_catalytic weight has
     # nothing to score and the rest renormalise over what is present.
     live = gw.catalytic + gw.angle
-    geometry = (gw.catalytic * SIXTH + gw.angle * SIXTH) / live
+    geometry = (gw.catalytic * score.distance + gw.angle * score.angle) / live
     expected = (
         scoring.weights.confidence * 0.5 + scoring.weights.geometry * geometry
     )
     assert score.geometry == pytest.approx(geometry, abs=TERM_TOL)
     assert score.total == pytest.approx(expected, abs=TERM_TOL)
-    # Every present term is SIXTH, so renormalising leaves geometry at SIXTH
-    # whatever the split: 0.5*0.5 + 0.5*(1/6) = 0.3333
-    assert score.geometry == pytest.approx(SIXTH, abs=TERM_TOL)
-    assert score.total == pytest.approx(0.25 + 0.5 * SIXTH, abs=TERM_TOL)
+    # stretched is 3.4 A on both bonds: distance 0.6875, angle 0.1665
+    assert score.distance == pytest.approx(0.6875, abs=TERM_TOL)
+    assert score.total == pytest.approx(0.496052, abs=TERM_TOL)
     assert score.non_catalytic is None
 
 
@@ -161,16 +172,16 @@ def test_confidence_outside_unit_interval_is_rejected(cfg, ideal):
 def test_mean_aggregation(cfg, mixed):
     scoring = cfg.pipeline.scoring.model_copy(update={"aggregate": "mean"})
     score = combine(1.0, measure(cfg, mixed), scoring)
-    expected = (1.0 + SIXTH) / 2
-    assert score.distance == pytest.approx(expected, abs=TERM_TOL)
-    assert score.angle == pytest.approx(expected, abs=TERM_TOL)
+    # mixed holds one bond at the ideal and one stretched to 3.4 A
+    assert score.distance == pytest.approx((1.0 + 0.6875) / 2, abs=TERM_TOL)
+    assert score.angle == pytest.approx(0.583241, abs=TERM_TOL)
 
 
 def test_min_aggregation_lets_one_bad_bond_dominate(cfg, mixed):
     scoring = cfg.pipeline.scoring.model_copy(update={"aggregate": "min"})
     score = combine(1.0, measure(cfg, mixed), scoring)
-    assert score.distance == pytest.approx(SIXTH, abs=TERM_TOL)
-    assert score.angle == pytest.approx(SIXTH, abs=TERM_TOL)
+    assert score.distance == pytest.approx(0.6875, abs=TERM_TOL)
+    assert score.angle == pytest.approx(0.166483, abs=TERM_TOL)
 
 
 def test_min_is_never_above_mean(cfg, mixed):
@@ -344,21 +355,33 @@ def test_a_clashing_bond_is_measured_as_built(cfg, clashing):
     assert by_id["lig_n3_to_asp229_od2"].distance == pytest.approx(1.700, abs=DIST_TOL)
 
 
-def test_the_distance_term_is_zero_at_both_extremes(pipeline):
-    """The symmetry that makes the clash gate necessary: 1.7 A and 4.1 A are
-    the same distance from the 2.9 A ideal, and both score zero."""
+def test_the_distance_term_is_zero_only_at_the_long_end(pipeline):
+    """Where the old symmetric term scored 1.7 A and 4.1 A alike, now only the
+    stretch is penalised. 1.7 A scores full marks and does not gate."""
     cfg = pipeline.scoring.distance
-    assert distance_term(1.700, cfg) == 0.0
-    assert distance_term(4.100, cfg) == 0.0
+    assert distance_term(1.700, cfg) == pytest.approx(1.0)
+    assert distance_term(4.100, cfg) == pytest.approx(0.25)
+    assert distance_term(cfg.tolerated, cfg) == 0.0
 
 
-def test_a_clash_gates_the_design(cfg, clashing):
-    """Without this, a design with an atom driven through the ligand could sit
-    in the frontier on its confidence term alone."""
+def test_a_1_7_angstrom_contact_no_longer_gates(cfg, clashing):
+    """The agreed consequence of the one-sided metric, asserted rather than
+    discovered later.
+
+    The clash gate moved from 2.2 A to 0.5 A, so the 1.700 A contact in this
+    fixture is now full marks on distance and is NOT gated. It still loses
+    ground on its angle, so it does not outrank the `ideal` fixture here --
+    but nothing about the DISTANCE penalises it any more.
+
+    Only an overlap below 0.5 A is rejected now. If sub-2 A contacts start
+    appearing in designs rather than in the shipped seeds, this is the test
+    that says the scorer was told to allow them.
+    """
     score = combine(1.0, measure(cfg, clashing), cfg.pipeline.scoring)
-    assert score.gated
-    assert score.gated_bonds == ["lig_n3_to_asp229_od2"]
-    assert score.total == 0.0
+    assert not score.gated
+    assert score.gated_bonds == []
+    assert score.distance == pytest.approx(1.0)
+    assert score.total > 0.0
 
 
 def test_a_clash_on_a_non_required_bond_does_not_gate(cfg, clashing):
@@ -398,13 +421,26 @@ def test_a_bond_just_above_the_clash_threshold_does_not_gate(cfg, pipeline):
     assert is_gated([short], pipeline.scoring.distance) == []
 
 
-def test_the_real_motif_clash_would_gate_a_design(pipeline):
-    """GLU229 OE2...N3 = 1.677 A, the value in data/05..07. If a DESIGN came
-    out like that it must be gated, not ranked."""
-    from src.scoring.hbond import BondMeasurement, is_gated
+def test_the_real_motif_clash_is_now_allowed_and_only_overlap_gates(pipeline):
+    """GLU229 OE2...N3 = 1.677 A, the value in data/05..07.
 
-    clash = BondMeasurement(
+    Under the old 2.2 A clash gate that was rejected. Under the agreed 0.5 A
+    gate it is accepted and scores full marks on distance. Recorded here with
+    the real number so the trade is visible: the gate now only catches atoms
+    driven essentially on top of each other.
+    """
+    from src.scoring.hbond import BondMeasurement, distance_term, is_gated
+
+    cfg = pipeline.scoring.distance
+    close = BondMeasurement(
         bond_id="lig_n3_to_glu229_oe2", distance=1.677, angle=138.0,
         angle_kind="acceptor_side", angle_ideal=120.0, required=True, atoms={},
     )
-    assert is_gated([clash], pipeline.scoring.distance) == ["lig_n3_to_glu229_oe2"]
+    assert is_gated([close], cfg) == []
+    assert distance_term(close.distance, cfg) == pytest.approx(1.0)
+
+    overlap = BondMeasurement(
+        bond_id="lig_n3_to_glu229_oe2", distance=0.4, angle=138.0,
+        angle_kind="acceptor_side", angle_ideal=120.0, required=True, atoms={},
+    )
+    assert is_gated([overlap], cfg) == ["lig_n3_to_glu229_oe2"]

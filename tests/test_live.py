@@ -212,7 +212,8 @@ def test_a_clash_is_named_too(tmp_path, live_cfg):
     required = {b.id for b in live_cfg.target.hbonds if b.required}
     raw = json.dumps([
         {
-            "bond_id": b, "distance": 1.5 if b == bonds[0] else 2.9,
+            # Below the 0.5 A clash gate: 1.5 A is no longer an overlap.
+            "bond_id": b, "distance": 0.3 if b == bonds[0] else 2.9,
             "angle": 120.0, "angle_ideal": 120.0,
             "required": b in required, "angle_kind": "acceptor_side", "atoms": {},
         }
