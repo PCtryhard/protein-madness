@@ -108,12 +108,24 @@ protonation:
   ph: 7.0
 
 scoring:
+  # S = 0.5*confidence + 0.5*(0.5*catalytic + 0.2*non_catalytic + 0.3*angle)
+  #
+  # Agreed with the team. Confidence drops from 0.70 to 0.50 because a
+  # confident fold with no functional site is not a better design than a
+  # less certain one that forms its bonds.
   weights:
-    confidence: 0.70
-    geometry: 0.30
+    confidence: 0.50
+    geometry: 0.50
+  # The distance terms split by what each bond is FOR. `catalytic` is the
+  # catalytic contacts; `non_catalytic` is the contact to the substrate's
+  # nitro (NO2) oxygen, which matters but should not outvote the chemistry.
+  # A target with no bond in a category renormalises over the rest, so
+  # variant 01 -- two catalytic bonds and no nitro contact -- can still
+  # reach 1.0 and stays comparable with 09 and 12.
   geometry_weights:
-    distance: 0.60
-    angle: 0.40
+    catalytic: 0.50
+    non_catalytic: 0.20
+    angle: 0.30
   confidence:
     metric: complex_ipde
     ipde_best: 0.5

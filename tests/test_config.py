@@ -111,7 +111,9 @@ def test_weights_must_sum_to_one(pipeline_path):
 
 def test_geometry_weights_must_sum_to_one(pipeline_path):
     raw = yaml.safe_load(pipeline_path.read_text(encoding="utf-8"))
-    raw["scoring"]["geometry_weights"] = {"distance": 0.5, "angle": 0.4}
+    raw["scoring"]["geometry_weights"] = {
+        "catalytic": 0.5, "non_catalytic": 0.2, "angle": 0.4
+    }
     with pytest.raises(ValidationError, match="sum to 1.0"):
         PipelineCfg.model_validate(raw)
 

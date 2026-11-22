@@ -183,8 +183,8 @@ class ProtonationCfg(Strict):
 
 
 class ScoreWeights(Strict):
-    confidence: Fraction = 0.70
-    geometry: Fraction = 0.30
+    confidence: Fraction = 0.50
+    geometry: Fraction = 0.50
 
     @model_validator(mode="after")
     def _sums_to_one(self) -> ScoreWeights:
@@ -198,15 +198,32 @@ class ScoreWeights(Strict):
 
 
 class GeometryWeights(Strict):
-    distance: Fraction = 0.60
-    angle: Fraction = 0.40
+    """How the geometry half of the score splits.
+
+    Three categories rather than the old distance/angle pair:
+
+      catalytic      distance terms of the catalytic H-bonds
+      non_catalytic  distance terms of the rest -- in these targets the
+                     contact to the substrate's nitro (NO2) oxygen
+      angle          angle terms, over every bond
+
+    A target with no non-catalytic bond (variant 01 has two catalytic bonds
+    and nothing else) renormalises over the categories it does have, so it can
+    still reach 1.0 and leaderboards stay comparable across variants.
+    """
+
+    catalytic: Fraction = 0.50
+    non_catalytic: Fraction = 0.20
+    angle: Fraction = 0.30
 
     @model_validator(mode="after")
     def _sums_to_one(self) -> GeometryWeights:
-        total = self.distance + self.angle
+        total = self.catalytic + self.non_catalytic + self.angle
         if abs(total - 1.0) > 1e-9:
             raise ValueError(
-                f"scoring.geometry_weights must sum to 1.0, got {total}"
+                f"scoring.geometry_weights must sum to 1.0, got {total} "
+                f"(catalytic={self.catalytic}, "
+                f"non_catalytic={self.non_catalytic}, angle={self.angle})"
             )
         return self
 
@@ -439,6 +456,16 @@ class HBond(Strict):
     rotatable_donor: bool = False
     required: bool = True
     acceptor_ideal_angle: float | None = None
+    # Which geometry weight this bond's distance term falls under. `required`
+    # is about GATING -- whether a design survives at all -- and is a poor
+    # proxy once the two ideas diverge, so this is explicit. Left unset it
+    # follows `required`, which is how every current target already divides:
+    # the catalytic contacts are required, the nitro-oxygen one is not.
+    catalytic: bool | None = None
+
+    @property
+    def is_catalytic(self) -> bool:
+        return self.required if self.catalytic is None else self.catalytic
 
     @model_validator(mode="after")
     def _antecedent_present_for_measurable_angle(self) -> HBond:

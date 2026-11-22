@@ -335,11 +335,18 @@ def test_real_target_bonds_resolve_and_measure_as_documented(pipeline_path):
         )
     }
 
-    # The base contact is unmutated crystal geometry in this variant.
+    # The base contact is unmutated crystal geometry in this variant, so what
+    # is MEASURED here is the 5FQJ value.
     base = measurements["lig_n3_to_asp229_od2"]
     assert base.distance == pytest.approx(2.734, abs=0.005)
     assert base.angle == pytest.approx(106.6, abs=0.1)
-    assert cfg.target.hbonds[0].acceptor_ideal_angle == pytest.approx(106.6, abs=0.1)
+
+    # The IDEAL is deliberately not that. It comes from the acceptor's
+    # chemistry -- an sp2 carboxylate wants 120 deg -- so the seed sits 13.4
+    # deg off its own target. Measured and ideal are different questions, and
+    # this asserts they have stopped being conflated.
+    assert cfg.target.hbonds[0].acceptor_ideal_angle == pytest.approx(120.0, abs=0.1)
+    assert abs(base.angle - cfg.target.hbonds[0].acceptor_ideal_angle) > 10.0
 
 
 @pytest.mark.skipif(not SEED_PDB.exists(), reason="seed PDB not in this checkout")
