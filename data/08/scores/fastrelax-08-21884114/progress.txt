@@ -1,0 +1,13 @@
+run      : fastrelax-08-21884114
+target   : 08_his_asp_asn
+started  : 2026-11-21T23:36:17+00:00
+updated  : 2026-11-21T23:55:29+00:00
+elapsed  : 0h 19m 12s
+
+designs  : 31
+  scored  : 7
+  gated   : 24
+
+best     : 0.7262  08_his_asp_asn.08.c00.seed.c3fd50
+
+rate     : 0.6 min/design (97 designs/hour)

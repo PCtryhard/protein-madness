@@ -1,0 +1,10 @@
+run      : fastrelax-07-21884112
+target   : 07_gln_glu_his
+started  : 2026-11-21T23:36:17+00:00
+updated  : 2026-11-21T23:46:32+00:00
+elapsed  : 0h 10m 14s
+
+designs  : 15
+  gated   : 15
+
+rate     : 0.7 min/design (88 designs/hour)

@@ -1,0 +1,13 @@
+run      : fastrelax-06-21884107
+target   : 06_asn_glu_his
+started  : 2026-11-21T23:36:19+00:00
+updated  : 2026-11-22T00:04:14+00:00
+elapsed  : 0h 27m 55s
+
+designs  : 31
+  scored  : 5
+  gated   : 26
+
+best     : 0.7430  06_asn_glu_his.06.c00.seed.1ad2d7
+
+rate     : 0.9 min/design (67 designs/hour)
