@@ -1,0 +1,72 @@
+Many modules are hidden in this stack. Use "module --show_hidden spider SOFTWARE" if you are not able to find the required software
+2026-11-22 11:09:48,669 INFO pipeline.runner [12_fastrelax_motif_af3.12] cycle 0: seeding
+2026-11-22 11:09:48,669 INFO pipeline.runner [12_fastrelax_motif_af3.12] cycle 0 done: best=0.8653 frontier=['12_fastrelax_motif_af3.12.c01.mutate.50ff7d']
+2026-11-22 11:09:48,674 INFO pipeline.runner [12_fastrelax_motif_af3.12] rfd3 (wiggle: partial diffusion) ... parent 12_fastrelax_motif_af3.12.c01.mutate.50ff7d, partial_t=2.0 A, 2 backbone(s)
+2026-11-22 11:10:25,670 INFO pipeline.runner [12_fastrelax_motif_af3.12] wiggle produced 2 backbone(s) from 12_fastrelax_motif_af3.12.c01.mutate.50ff7d
+2026-11-22 11:10:25,720 INFO pipeline.runner [12_fastrelax_motif_af3.12] backbone 0 motif RMSD: A180 0.00A, A243 0.00A, A98 0.00A
+2026-11-22 11:10:25,814 INFO pipeline.runner [12_fastrelax_motif_af3.12] ligandmpnn ... backbone 0, 3 sequence(s)
+2026-11-22 11:10:34,058 INFO pipeline.runner [12_fastrelax_motif_af3.12] ligandmpnn gave 3 sequence(s) for backbone 0
+2026-11-22 11:10:34,062 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c01.wiggle.0eae81, replicate 0, 260 residues
+2026-11-22 11:11:24,165 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c01.wiggle.a68699, replicate 0, 260 residues
+2026-11-22 11:12:08,220 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c01.wiggle.1c4d7d, replicate 0, 260 residues
+2026-11-22 11:12:52,055 INFO pipeline.runner [12_fastrelax_motif_af3.12] backbone 1 motif RMSD: A180 0.00A, A243 0.00A, A98 0.00A
+2026-11-22 11:12:52,148 INFO pipeline.runner [12_fastrelax_motif_af3.12] ligandmpnn ... backbone 1, 3 sequence(s)
+2026-11-22 11:12:57,936 INFO pipeline.runner [12_fastrelax_motif_af3.12] ligandmpnn gave 3 sequence(s) for backbone 1
+2026-11-22 11:12:57,941 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c01.wiggle.04a179, replicate 0, 260 residues
+2026-11-22 11:13:42,028 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c01.wiggle.ab818a, replicate 0, 260 residues
+2026-11-22 11:14:25,665 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c01.wiggle.0e2edc, replicate 0, 260 residues
+2026-11-22 11:15:09,949 INFO pipeline.runner [12_fastrelax_motif_af3.12] rfd3 (wiggle: partial diffusion) ... parent 12_fastrelax_motif_af3.12.c01.mutate.50ff7d, partial_t=2.0 A, 2 backbone(s)
+2026-11-22 11:15:41,165 INFO pipeline.runner [12_fastrelax_motif_af3.12] wiggle produced 2 backbone(s) from 12_fastrelax_motif_af3.12.c01.mutate.50ff7d
+2026-11-22 11:15:41,213 INFO pipeline.runner [12_fastrelax_motif_af3.12] backbone 0 motif RMSD: A180 0.00A, A243 0.00A, A98 0.00A
+2026-11-22 11:15:41,213 INFO pipeline.runner [12_fastrelax_motif_af3.12] ligandmpnn ... backbone 0, 3 sequence(s)
+2026-11-22 11:15:47,130 INFO pipeline.runner [12_fastrelax_motif_af3.12] ligandmpnn gave 3 sequence(s) for backbone 0
+2026-11-22 11:15:47,133 INFO pipeline.runner cache hit for 12_fastrelax_motif_af3.12.c01.wiggle.0eae81 (reusing 12_fastrelax_motif_af3.12.c01.wiggle.0eae81)
+2026-11-22 11:15:47,140 INFO pipeline.runner cache hit for 12_fastrelax_motif_af3.12.c01.wiggle.a68699 (reusing 12_fastrelax_motif_af3.12.c01.wiggle.a68699)
+2026-11-22 11:15:47,145 INFO pipeline.runner cache hit for 12_fastrelax_motif_af3.12.c01.wiggle.1c4d7d (reusing 12_fastrelax_motif_af3.12.c01.wiggle.1c4d7d)
+2026-11-22 11:15:47,210 INFO pipeline.runner [12_fastrelax_motif_af3.12] backbone 1 motif RMSD: A180 0.00A, A243 0.00A, A98 0.00A
+2026-11-22 11:15:47,210 INFO pipeline.runner [12_fastrelax_motif_af3.12] ligandmpnn ... backbone 1, 3 sequence(s)
+2026-11-22 11:15:52,938 INFO pipeline.runner [12_fastrelax_motif_af3.12] ligandmpnn gave 3 sequence(s) for backbone 1
+2026-11-22 11:15:52,942 INFO pipeline.runner cache hit for 12_fastrelax_motif_af3.12.c01.wiggle.04a179 (reusing 12_fastrelax_motif_af3.12.c01.wiggle.04a179)
+2026-11-22 11:15:52,947 INFO pipeline.runner cache hit for 12_fastrelax_motif_af3.12.c01.wiggle.ab818a (reusing 12_fastrelax_motif_af3.12.c01.wiggle.ab818a)
+2026-11-22 11:15:52,953 INFO pipeline.runner cache hit for 12_fastrelax_motif_af3.12.c01.wiggle.0e2edc (reusing 12_fastrelax_motif_af3.12.c01.wiggle.0e2edc)
+2026-11-22 11:15:53,061 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c01.mutate.8adbf1, replicate 0, 260 residues
+2026-11-22 11:16:37,113 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c01.mutate.bece19, replicate 0, 260 residues
+2026-11-22 11:17:20,144 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c01.mutate.1761de, replicate 0, 260 residues
+2026-11-22 11:18:04,260 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c01.mutate.8ed72a, replicate 0, 260 residues
+2026-11-22 11:18:47,414 INFO pipeline.runner [12_fastrelax_motif_af3.12] cycle 1: 10 designs, best=0.8653, 1 cycle(s) without improvement
+2026-11-22 11:18:47,419 INFO pipeline.runner [12_fastrelax_motif_af3.12] rfd3 (wiggle: partial diffusion) ... parent 12_fastrelax_motif_af3.12.c01.mutate.50ff7d, partial_t=2.0 A, 2 backbone(s)
+2026-11-22 11:19:18,692 INFO pipeline.runner [12_fastrelax_motif_af3.12] wiggle produced 2 backbone(s) from 12_fastrelax_motif_af3.12.c01.mutate.50ff7d
+2026-11-22 11:19:18,744 INFO pipeline.runner [12_fastrelax_motif_af3.12] backbone 0 motif RMSD: A180 0.00A, A243 0.00A, A98 0.00A
+2026-11-22 11:19:18,838 INFO pipeline.runner [12_fastrelax_motif_af3.12] ligandmpnn ... backbone 0, 3 sequence(s)
+2026-11-22 11:19:24,909 INFO pipeline.runner [12_fastrelax_motif_af3.12] ligandmpnn gave 3 sequence(s) for backbone 0
+2026-11-22 11:19:24,913 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c02.wiggle.c26850, replicate 0, 260 residues
+2026-11-22 11:20:09,520 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c02.wiggle.06ae60, replicate 0, 260 residues
+2026-11-22 11:20:52,486 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c02.wiggle.8718cd, replicate 0, 260 residues
+2026-11-22 11:21:36,219 INFO pipeline.runner [12_fastrelax_motif_af3.12] backbone 1 motif RMSD: A180 0.00A, A243 0.00A, A98 0.00A
+2026-11-22 11:21:36,313 INFO pipeline.runner [12_fastrelax_motif_af3.12] ligandmpnn ... backbone 1, 3 sequence(s)
+2026-11-22 11:21:42,308 INFO pipeline.runner [12_fastrelax_motif_af3.12] ligandmpnn gave 3 sequence(s) for backbone 1
+2026-11-22 11:21:42,313 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c02.wiggle.81baf3, replicate 0, 260 residues
+2026-11-22 11:22:25,446 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c02.wiggle.b26fbf, replicate 0, 260 residues
+2026-11-22 11:23:09,329 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c02.wiggle.a25764, replicate 0, 260 residues
+2026-11-22 11:23:52,139 INFO pipeline.runner [12_fastrelax_motif_af3.12] rfd3 (wiggle: partial diffusion) ... parent 12_fastrelax_motif_af3.12.c01.mutate.bece19, partial_t=2.0 A, 2 backbone(s)
+2026-11-22 11:24:23,435 INFO pipeline.runner [12_fastrelax_motif_af3.12] wiggle produced 2 backbone(s) from 12_fastrelax_motif_af3.12.c01.mutate.bece19
+2026-11-22 11:24:23,486 INFO pipeline.runner [12_fastrelax_motif_af3.12] backbone 0 motif RMSD: A180 0.00A, A243 0.00A, A98 0.00A
+2026-11-22 11:24:23,580 INFO pipeline.runner [12_fastrelax_motif_af3.12] ligandmpnn ... backbone 0, 3 sequence(s)
+2026-11-22 11:24:29,565 INFO pipeline.runner [12_fastrelax_motif_af3.12] ligandmpnn gave 3 sequence(s) for backbone 0
+2026-11-22 11:24:29,569 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c02.wiggle.8277e3, replicate 0, 260 residues
+2026-11-22 11:25:14,081 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c02.wiggle.022e22, replicate 0, 260 residues
+2026-11-22 11:25:57,325 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c02.wiggle.3254df, replicate 0, 260 residues
+2026-11-22 11:26:41,215 INFO pipeline.runner [12_fastrelax_motif_af3.12] backbone 1 motif RMSD: A180 0.00A, A243 0.00A, A98 0.00A
+2026-11-22 11:26:41,310 INFO pipeline.runner [12_fastrelax_motif_af3.12] ligandmpnn ... backbone 1, 3 sequence(s)
+2026-11-22 11:26:47,342 INFO pipeline.runner [12_fastrelax_motif_af3.12] ligandmpnn gave 3 sequence(s) for backbone 1
+2026-11-22 11:26:47,347 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c02.wiggle.99f633, replicate 0, 260 residues
+2026-11-22 11:27:30,564 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c02.wiggle.c9bb5a, replicate 0, 260 residues
+2026-11-22 11:28:14,028 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c02.wiggle.431aa4, replicate 0, 260 residues
+2026-11-22 11:28:57,200 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c02.mutate.12e07f, replicate 0, 260 residues
+2026-11-22 11:29:41,466 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c02.mutate.6512f7, replicate 0, 260 residues
+2026-11-22 11:30:25,178 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c02.mutate.c476bd, replicate 0, 260 residues
+2026-11-22 11:31:09,156 INFO pipeline.runner [12_fastrelax_motif_af3.12] boltz-2 (fold + score) ... 12_fastrelax_motif_af3.12.c02.mutate.10f032, replicate 0, 260 residues
+2026-11-22 11:31:52,462 INFO pipeline.runner [12_fastrelax_motif_af3.12] cycle 2: 16 designs, best=0.8653, 2 cycle(s) without improvement
+2026-11-22 11:31:52,462 INFO pipeline.runner [12_fastrelax_motif_af3.12] stopped: no improvement above min_delta=0.005 for 2 consecutive cycles
+Best 12_fastrelax_motif_af3.12.c01.mutate.50ff7d: 0.8653; no improvement above min_delta=0.005 for 2 consecutive cycles
+wrote data/final_run_60/10-12-50ff7d/report.md

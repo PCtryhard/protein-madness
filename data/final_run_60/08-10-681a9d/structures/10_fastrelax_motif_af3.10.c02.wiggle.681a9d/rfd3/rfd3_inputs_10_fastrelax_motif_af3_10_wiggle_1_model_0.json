@@ -1,0 +1,69 @@
+{
+    "diffused_index_map": {
+        "A105": "A105",
+        "A110": "A110",
+        "A19": "A19"
+    },
+    "metrics": {
+        "join_point_rmsd_by_token": {
+            "A105": 0.0,
+            "A110": 0.0,
+            "A19": 0.0
+        },
+        "insertion.mae": 0.0,
+        "insertion.rmcd": 0.0,
+        "insertion_rmsd": 0.0,
+        "join_point_rmsd": 0.0,
+        "n_conjoined_residues": 0,
+        "max_ca_deviation": 0.09152483940124512,
+        "n_chainbreaks": 0,
+        "n_clashing.interresidue_clashes_w_sidechain": 0,
+        "n_clashing.interresidue_clashes_w_backbone": 0,
+        "n_clashing.ligand_clashes": 0,
+        "n_clashing.ligand_min_distance": 3.2037179470062256,
+        "non_loop_fraction": 0.6692307692307692,
+        "loop_fraction": 0.33076923076923076,
+        "helix_fraction": 0.4423076923076923,
+        "sheet_fraction": 0.22692307692307692,
+        "num_ss_elements": 19,
+        "radius_of_gyration": 17.11684670847574,
+        "alanine_content": 0.31153846153846154,
+        "glycine_content": 0.03461538461538462,
+        "num_residues": 260,
+        "diffused_com": [
+            -0.17179478704929352,
+            0.05063780024647713,
+            0.1813732236623764
+        ],
+        "fixed_com": [
+            2.307105541229248,
+            -0.114211305975914,
+            -0.6891741156578064
+        ]
+    },
+    "specification": {
+        "input": "/cluster/home/kg2616897/protein-madness/data/10/rfd3/overnight-10-21894359/10_fastrelax_motif_af3.10.c00.seed/rfd3/rfd3_inputs_10_fastrelax_motif_af3_10_18_model_0.pdb",
+        "unindex": "A105,A110,A19",
+        "ligand": "6NT",
+        "extra": {
+            "example": "10_fastrelax_motif_af3_10_wiggle",
+            "task_name": "rfd3_inputs_10_fastrelax_motif_af3_10_wiggle",
+            "num_tokens_in": 264,
+            "num_residues_in": 264,
+            "num_chains": 2,
+            "num_atoms": 1764,
+            "num_residues": 265,
+            "example_id": "rfd3_inputs_10_fastrelax_motif_af3_10_wiggle_1"
+        },
+        "select_fixed_atoms": {
+            "6NT": "ALL",
+            "A105": "OD1,CG,OD2",
+            "A110": "OD1,CG,ND2",
+            "A19": "OE1,CD,NE2"
+        },
+        "select_unfixed_sequence": false,
+        "partial_t": 2.0
+    },
+    "ckpt_path": "/cluster/scratch/kg2616897/pm-perlin/weights/rfd3/rfd3_latest.ckpt",
+    "seed": 2
+}

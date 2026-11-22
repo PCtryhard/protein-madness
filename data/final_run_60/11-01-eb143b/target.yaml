@@ -1,0 +1,57 @@
+name: 01_fastrelax_motif_af3
+seeds:
+- id: '01'
+  pdb: /cluster/home/kg2616897/protein-madness/data/01/rfd3/overnight-01-21894353/01_fastrelax_motif_af3.01.c01.wiggle.49c611/rfd3/rfd3_inputs_01_fastrelax_motif_af3_01_wiggle_0_model_0.pdb
+  contig: 260-260
+ligand:
+  id: 6NT
+  ccd: 6NT
+  smiles: null
+  reference_sdf: null
+motif:
+  fixed:
+  - chain: A
+    resnum: 229
+  - chain: A
+    resnum: 291
+  fixed_atoms:
+    A229: OD1,CG,OD2
+    A291: CD2,CE1,NE2
+hbonds:
+- id: lig_n3_to_asp229_od2
+  donor:
+    site: ligand
+    atom: N3
+  acceptor:
+    site: protein
+    chain: A
+    resnum: 229
+    atom: OD2
+  acceptor_antecedent:
+    site: protein
+    chain: A
+    resnum: 229
+    atom: CG
+  rotatable_donor: false
+  required: true
+  acceptor_ideal_angle: 120.0
+- id: his291_ne2_to_lig_n1
+  donor:
+    site: protein
+    chain: A
+    resnum: 291
+    atom: NE2
+  donor_antecedent:
+    site: protein
+    chain: A
+    resnum: 291
+    atom: CD2
+  acceptor:
+    site: ligand
+    atom: N1
+  acceptor_antecedent:
+    site: ligand
+    atom: N2
+  rotatable_donor: false
+  required: true
+  acceptor_ideal_angle: 126.4

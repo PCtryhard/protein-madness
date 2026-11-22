@@ -1,0 +1,66 @@
+{
+    "diffused_index_map": {
+        "A88": "A88",
+        "A206": "A206"
+    },
+    "metrics": {
+        "join_point_rmsd_by_token": {
+            "A88": 0.0,
+            "A206": 0.0
+        },
+        "insertion.mae": 0.0,
+        "insertion.rmcd": 0.0,
+        "insertion_rmsd": 0.0,
+        "join_point_rmsd": 0.0,
+        "n_conjoined_residues": 0,
+        "max_ca_deviation": 0.09882020950317383,
+        "n_chainbreaks": 0,
+        "n_clashing.interresidue_clashes_w_sidechain": 0,
+        "n_clashing.interresidue_clashes_w_backbone": 0,
+        "n_clashing.ligand_clashes": 0,
+        "n_clashing.ligand_min_distance": 2.6623291969299316,
+        "non_loop_fraction": 0.8346153846153846,
+        "loop_fraction": 0.16538461538461538,
+        "helix_fraction": 0.8346153846153846,
+        "sheet_fraction": 0.0,
+        "num_ss_elements": 12,
+        "radius_of_gyration": 16.72696760688845,
+        "alanine_content": 0.31153846153846154,
+        "glycine_content": 0.07692307692307693,
+        "num_residues": 260,
+        "diffused_com": [
+            -0.13322290778160095,
+            -0.020988425239920616,
+            0.07727766036987305
+        ],
+        "fixed_com": [
+            -0.3435600996017456,
+            -0.4008517861366272,
+            1.0266927480697632
+        ]
+    },
+    "specification": {
+        "input": "/cluster/home/kg2616897/protein-madness/data/01/rfd3/overnight-01-21894353/01_fastrelax_motif_af3.01.c00.seed/rfd3/rfd3_inputs_01_fastrelax_motif_af3_01_5_model_0.pdb",
+        "unindex": "A88,A206",
+        "ligand": "6NT",
+        "extra": {
+            "example": "01_fastrelax_motif_af3_01_wiggle",
+            "task_name": "rfd3_inputs_01_fastrelax_motif_af3_01_wiggle",
+            "num_tokens_in": 263,
+            "num_residues_in": 263,
+            "num_chains": 2,
+            "num_atoms": 1759,
+            "num_residues": 264,
+            "example_id": "rfd3_inputs_01_fastrelax_motif_af3_01_wiggle_0"
+        },
+        "select_fixed_atoms": {
+            "6NT": "ALL",
+            "A88": "OD1,CG,OD2",
+            "A206": "CD2,CE1,NE2"
+        },
+        "select_unfixed_sequence": false,
+        "partial_t": 2.0
+    },
+    "ckpt_path": "/cluster/scratch/kg2616897/pm-perlin/weights/rfd3/rfd3_latest.ckpt",
+    "seed": 1
+}

@@ -1,0 +1,80 @@
+name: 08_fastrelax_motif_af3
+seeds:
+- id: 08
+  pdb: /cluster/home/kg2616897/protein-madness/data/08/rfd3/depth-08-21899148/08_fastrelax_motif_af3.08.c01.wiggle.0ee6ca/rfd3/rfd3_inputs_08_fastrelax_motif_af3_08_wiggle_0_model_0.pdb
+  contig: 260-260
+ligand:
+  id: 6NT
+  ccd: 6NT
+  smiles: null
+  reference_sdf: null
+motif:
+  fixed:
+  - chain: A
+    resnum: 229
+  - chain: A
+    resnum: 261
+  - chain: A
+    resnum: 291
+  fixed_atoms:
+    A229: OD1,CG,OD2
+    A261: OD1,CG,ND2
+    A291: CD2,CE1,NE2
+hbonds:
+- id: lig_n3_to_asp229_od2
+  donor:
+    site: ligand
+    atom: N3
+  acceptor:
+    site: protein
+    chain: A
+    resnum: 229
+    atom: OD2
+  acceptor_antecedent:
+    site: protein
+    chain: A
+    resnum: 229
+    atom: CG
+  rotatable_donor: false
+  required: true
+  acceptor_ideal_angle: 120.0
+- id: his291_ne2_to_lig_n1
+  donor:
+    site: protein
+    chain: A
+    resnum: 291
+    atom: NE2
+  donor_antecedent:
+    site: protein
+    chain: A
+    resnum: 291
+    atom: CD2
+  acceptor:
+    site: ligand
+    atom: N1
+  acceptor_antecedent:
+    site: ligand
+    atom: N2
+  rotatable_donor: false
+  required: true
+  acceptor_ideal_angle: 126.4
+- id: asn261_nd2_to_lig_o11
+  donor:
+    site: protein
+    chain: A
+    resnum: 261
+    atom: ND2
+  donor_antecedent:
+    site: protein
+    chain: A
+    resnum: 261
+    atom: CG
+  acceptor:
+    site: ligand
+    atom: O11
+  acceptor_antecedent:
+    site: ligand
+    atom: NO1
+  rotatable_donor: false
+  required: false
+  acceptor_ideal_angle: 120.0

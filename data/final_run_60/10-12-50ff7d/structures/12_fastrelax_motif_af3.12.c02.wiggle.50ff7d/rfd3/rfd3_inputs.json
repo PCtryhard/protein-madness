@@ -1,0 +1,14 @@
+{
+  "12_fastrelax_motif_af3_12_wiggle": {
+    "input": "/cluster/home/kg2616897/protein-madness/data/12/rfd3/fastrelax-12-21883495/12_fastrelax_motif_af3.12.c00.seed/rfd3/rfd3_inputs_12_fastrelax_motif_af3_12_6_model_0.pdb",
+    "unindex": "A98,A243,A180",
+    "select_fixed_atoms": {
+      "6NT": "ALL",
+      "A98": "OE1,CD,OE2",
+      "A243": "OD1,CG,ND2",
+      "A180": "OD1,CG,ND2"
+    },
+    "ligand": "6NT",
+    "partial_t": 2.0
+  }
+}

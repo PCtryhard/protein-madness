@@ -1,0 +1,13 @@
+run      : 03-01-d03ee1
+target   : 01_fastrelax_motif_af3
+started  : 2026-11-22T10:06:22+00:00
+updated  : 2026-11-22T10:24:01+00:00
+elapsed  : 0h 17m 39s
+
+designs  : 21
+  scored  : 4
+  gated   : 17
+
+best     : 0.7897  01_fastrelax_motif_af3.01.c00.seed.d03ee1
+
+rate     : 0.8 min/design (71 designs/hour)

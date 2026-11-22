@@ -781,7 +781,9 @@ class Runner:
                 return seed
         raise KeyError(f"no seed named {seed_id!r} in target {self.cfg.target.name!r}")
 
-    def run_scaffold(self, seed: Seed, gpu_pool: GpuPool) -> ScaffoldSearch:
+    def run_scaffold(
+        self, seed: Seed, gpu_pool: GpuPool, *, initial: list[Candidate] | None = None
+    ) -> ScaffoldSearch:
         """One scaffold's whole search, from cycle 0 to its stopping condition."""
         scaffold_id = f"{self.cfg.target.name}.{seed.id}"
         search = ScaffoldSearch(
@@ -791,7 +793,7 @@ class Runner:
         )
 
         log.info("[%s] cycle 0: seeding", scaffold_id)
-        search.seed_frontier(self.seed_cycle(seed, gpu_pool))
+        search.seed_frontier(self.seed_cycle(seed, gpu_pool) if initial is None else initial)
         log.info(
             "[%s] cycle 0 done: best=%.4f frontier=%s",
             scaffold_id, search.best_score, [c.design_id for c in search.frontier],

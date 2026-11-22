@@ -7,7 +7,7 @@
     "apolar_match": 0.15
   },
   "min_score": 0.0,
-  "designs": 232,
+  "designs": 314,
   "reference": {
     "structure": "data/01/inputs/fold_wildtype_ligand_model_0.cif",
     "partners": [
