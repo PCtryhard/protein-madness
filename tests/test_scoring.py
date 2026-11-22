@@ -80,12 +80,14 @@ def test_mixed_fixture_differs_between_its_two_bonds(cfg, mixed):
 
 def test_distance_term_hand_values(pipeline):
     cfg = pipeline.scoring.distance
-    # Full marks at the ideal AND anywhere below it.
+    # Full marks only at the ideal.
     assert distance_term(2.900, cfg) == pytest.approx(1.0)
-    assert distance_term(2.400, cfg) == pytest.approx(1.0)
-    assert distance_term(1.000, cfg) == pytest.approx(1.0)
-    assert distance_term(0.500, cfg) == pytest.approx(1.0)
-    # Only stretching costs anything: linear from ideal to tolerated.
+    # Short side: linear down to `clash`, over 2.4 A of room.
+    assert distance_term(2.400, cfg) == pytest.approx(19 / 24)
+    assert distance_term(1.000, cfg) == pytest.approx(5 / 24)
+    assert distance_term(0.500, cfg) == pytest.approx(0.0)
+    # Long side: linear up to `tolerated`, over 1.6 A of room, so it falls
+    # faster for the same deviation.
     assert distance_term(3.400, cfg) == pytest.approx(0.6875)
     assert distance_term(4.000, cfg) == pytest.approx(0.3125)
     # At and beyond the tolerance it is zero, never negative.
@@ -93,21 +95,30 @@ def test_distance_term_hand_values(pipeline):
     assert distance_term(9.000, cfg) == 0.0
 
 
-def test_distance_term_does_not_penalise_a_close_contact(pipeline):
-    """A close hydrogen bond is not a worse hydrogen bond.
+def test_a_close_contact_is_penalised_less_than_a_long_one(pipeline):
+    """Too close is worse than ideal, but not as bad as too far.
 
-    The term used to be symmetric about the ideal, so 2.4 A scored the same as
-    3.4 A. Now the short side is flat: the only short-distance penalty is the
-    clash gate, which rejects outright rather than shading the score.
+    The term has been through three shapes, and the numbers only make sense
+    against the right one: symmetric about `ideal`, then flat below it, and
+    now asymmetric. A deviation below `ideal` costs (ideal - clash) against
+    (tolerated - ideal) above, so with the shipped thresholds it costs two
+    thirds as much.
     """
     cfg = pipeline.scoring.distance
-    for delta in (0.0, 0.1, 0.25, 0.4, 0.6, 1.0, 2.0):
-        short = cfg.ideal - delta
-        if short < cfg.clash:
-            continue
-        assert distance_term(short, cfg) == pytest.approx(1.0)
-    # and the long side still decays
-    assert distance_term(cfg.ideal + 0.5, cfg) < 1.0
+    long_span = cfg.tolerated - cfg.ideal
+    short_span = cfg.ideal - cfg.clash
+    assert short_span > long_span, "short side must have more room than long"
+
+    for delta in (0.1, 0.25, 0.4, 0.6, 1.0, 1.3):
+        short = distance_term(cfg.ideal - delta, cfg)
+        long = distance_term(cfg.ideal + delta, cfg)
+        # both lose something...
+        assert short < 1.0
+        assert long < 1.0
+        # ...but the short side loses less
+        assert short > long
+        # and by the fixed ratio of the two spans
+        assert (1 - short) == pytest.approx((1 - long) * long_span / short_span)
 
 
 def test_angle_term_hand_values(pipeline):
@@ -355,13 +366,19 @@ def test_a_clashing_bond_is_measured_as_built(cfg, clashing):
     assert by_id["lig_n3_to_asp229_od2"].distance == pytest.approx(1.700, abs=DIST_TOL)
 
 
-def test_the_distance_term_is_zero_only_at_the_long_end(pipeline):
-    """Where the old symmetric term scored 1.7 A and 4.1 A alike, now only the
-    stretch is penalised. 1.7 A scores full marks and does not gate."""
+def test_the_distance_term_reaches_zero_at_each_gate(pipeline):
+    """Each side falls to zero exactly where its gate fires.
+
+    So nothing can score above zero on a distance the gate would reject, and
+    the old pathology -- 1.7 A and 4.1 A scoring alike -- is gone without
+    needing the term to be flat.
+    """
     cfg = pipeline.scoring.distance
-    assert distance_term(1.700, cfg) == pytest.approx(1.0)
+    assert distance_term(cfg.clash, cfg) == pytest.approx(0.0)
+    assert distance_term(cfg.tolerated, cfg) == pytest.approx(0.0)
+    assert distance_term(1.700, cfg) == pytest.approx(0.5)
     assert distance_term(4.100, cfg) == pytest.approx(0.25)
-    assert distance_term(cfg.tolerated, cfg) == 0.0
+    assert distance_term(1.700, cfg) > distance_term(4.100, cfg)
 
 
 def test_a_1_7_angstrom_contact_no_longer_gates(cfg, clashing):
@@ -369,18 +386,18 @@ def test_a_1_7_angstrom_contact_no_longer_gates(cfg, clashing):
     discovered later.
 
     The clash gate moved from 2.2 A to 0.5 A, so the 1.700 A contact in this
-    fixture is now full marks on distance and is NOT gated. It still loses
-    ground on its angle, so it does not outrank the `ideal` fixture here --
-    but nothing about the DISTANCE penalises it any more.
+    fixture is no longer rejected. It is still marked down -- 0.5 on that
+    bond's distance term -- just not thrown away.
 
     Only an overlap below 0.5 A is rejected now. If sub-2 A contacts start
     appearing in designs rather than in the shipped seeds, this is the test
-    that says the scorer was told to allow them.
+    that says the scorer was told to tolerate them.
     """
     score = combine(1.0, measure(cfg, clashing), cfg.pipeline.scoring)
     assert not score.gated
     assert score.gated_bonds == []
-    assert score.distance == pytest.approx(1.0)
+    # one bond at 1.700 A (0.5) and one at the ideal (1.0)
+    assert score.distance == pytest.approx(0.75, abs=TERM_TOL)
     assert score.total > 0.0
 
 
@@ -424,10 +441,11 @@ def test_a_bond_just_above_the_clash_threshold_does_not_gate(cfg, pipeline):
 def test_the_real_motif_clash_is_now_allowed_and_only_overlap_gates(pipeline):
     """GLU229 OE2...N3 = 1.677 A, the value in data/05..07.
 
-    Under the old 2.2 A clash gate that was rejected. Under the agreed 0.5 A
-    gate it is accepted and scores full marks on distance. Recorded here with
-    the real number so the trade is visible: the gate now only catches atoms
-    driven essentially on top of each other.
+    Under the old 2.2 A clash gate that was rejected outright. Under the
+    agreed 0.5 A gate it survives, scoring 0.49 on distance -- squarely
+    penalised, but ranked rather than discarded. Recorded with the real number
+    so the trade stays visible: the gate now only catches atoms driven
+    essentially on top of each other.
     """
     from src.scoring.hbond import BondMeasurement, distance_term, is_gated
 
@@ -437,7 +455,9 @@ def test_the_real_motif_clash_is_now_allowed_and_only_overlap_gates(pipeline):
         angle_kind="acceptor_side", angle_ideal=120.0, required=True, atoms={},
     )
     assert is_gated([close], cfg) == []
-    assert distance_term(close.distance, cfg) == pytest.approx(1.0)
+    assert distance_term(close.distance, cfg) == pytest.approx(0.490417, abs=1e-5)
+    # and it is beaten by the same deviation on the long side being worse
+    assert distance_term(close.distance, cfg) < distance_term(2.9, cfg)
 
     overlap = BondMeasurement(
         bond_id="lig_n3_to_glu229_oe2", distance=0.4, angle=138.0,
