@@ -121,7 +121,7 @@ def test_geometry_weights_must_sum_to_one(pipeline_path):
 def test_distance_thresholds_must_be_ordered(pipeline_path):
     raw = yaml.safe_load(pipeline_path.read_text(encoding="utf-8"))
     raw["scoring"]["distance"] = {"ideal": 3.6, "tolerated": 3.5, "fail": 4.5}
-    with pytest.raises(ValidationError, match="ideal < tolerated < fail"):
+    with pytest.raises(ValidationError, match="ideal <= tolerated <= fail"):
         PipelineCfg.model_validate(raw)
 
 
@@ -366,7 +366,7 @@ def test_no_numeric_literals_in_scoring():
 def test_clash_must_be_below_ideal(pipeline_path):
     raw = yaml.safe_load(pipeline_path.read_text(encoding="utf-8"))
     raw["scoring"]["distance"]["clash"] = 3.0
-    with pytest.raises(ValidationError, match="clash < ideal < tolerated < fail"):
+    with pytest.raises(ValidationError, match="clash < ideal <= tolerated <= fail"):
         PipelineCfg.model_validate(raw)
 
 

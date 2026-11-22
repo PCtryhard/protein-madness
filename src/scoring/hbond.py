@@ -215,15 +215,28 @@ def measure_all(
 
 
 def distance_term(distance: float, cfg: DistanceCfg) -> float:
-    """Per-bond distance score, 1 best.
+    """Per-bond distance score, 1 best. ONE-SIDED: short is not penalised.
 
-        d = clip(1 - |r - ideal| / (tol - ideal), 0, 1)
+        d = 1                                        r <= ideal
+        d = clip(1 - (r - ideal) / (tol - ideal), 0, 1)   r >  ideal
 
-    Symmetric about the ideal, so a 2.4 A clash is penalised as well as a 3.4 A
-    stretch.
+    Being closer than `ideal` scores full marks. Only `clash` penalises a short
+    contact, and it does so by gating rather than by shading the term, so there
+    is no band where a design loses points for holding its partner tightly.
+
+    This was symmetric about the ideal, which meant a 2.4 A contact scored the
+    same as a 3.4 A one. The team's position is that a close hydrogen bond is
+    not a worse hydrogen bond, so the penalty now applies only as the contact
+    stretches.
     """
     span = cfg.tolerated - cfg.ideal
-    return max(0.0, min(1.0, 1.0 - abs(distance - cfg.ideal) / span))
+    if span <= 0:
+        # Degenerate window: everything at or under `ideal` is full marks and
+        # anything beyond it is zero, rather than a divide-by-zero.
+        return 1.0 if distance <= cfg.ideal else 0.0
+    if distance <= cfg.ideal:
+        return 1.0
+    return max(0.0, min(1.0, 1.0 - (distance - cfg.ideal) / span))
 
 
 def angle_term(angle: float, ideal: float, cfg: AngleCfg) -> float:
