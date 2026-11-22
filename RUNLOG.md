@@ -344,6 +344,110 @@ have — but it is an assumption, not a discovery.
 
 ---
 
+## 15. All 13 variants, 20 backbones each — Euler 21893949…21894359 ✅
+
+The first batch wide enough to rank variants rather than guess. Every variant
+we have, run from one deployed tree at `origin/main` 852df71, submitted through
+`cluster/euler/run.sbatch`.
+
+**Config** (`~/pm-runconf/overnight.yaml`): 20 backbones × 3 sequences at
+cycle 0, `max_cycles: 1`, `recycling_steps: 5`. **950 designs, 63 scored
+(6.6%).** All 13 jobs `COMPLETED`, exit 0.
+
+| rank | variant | best | scored/total | best came from |
+|---|---|---|---|---|
+| 1 | **10** | **0.8988** | 3/76 | `mutate` |
+| 2 | 01 | 0.8296 | 10/76 | `mutate` |
+| 3 | 09 | 0.8065 | 8/76 | `seed` |
+| 4 | 03 | 0.8059 | 5/76 | `wiggle` |
+| 5 | 06 | 0.7286 | 9/76 | `seed` |
+| 6 | 07 | 0.7249 | 4/76 | `seed` |
+| 7 | 11 | 0.7026 | 8/76 | `seed` |
+| 8 | 08 | 0.6655 | 4/76 | `seed` |
+| 9 | 05 | 0.6061 | 5/76 | `seed` |
+| 10 | 13 | 0.5333 | 6/76 | `wiggle` |
+| 11 | 02 | 0.2254 | 1/70 | `seed` |
+| — | 04 | — | 0/60 | nothing cleared the gate |
+| — | 12 | — | 0/60 | nothing cleared the gate |
+
+Variant 10's winner is strong on every term, not carried by one:
+confidence 0.912, catalytic 0.918, non-catalytic 0.981, angle 0.768.
+
+### The binding constraint is the conjunction, not either bond
+
+Each required bond lands on its own 10–37% of the time. **Both at once, ~6%.**
+Variant 12 is the clean illustration: 14/60 designs placed the catalytic bond
+inside the gate, 6/60 placed the ASN291 bond, and **0 placed both** — against
+1.4 expected if the two were independent.
+
+So the per-bond numbers in earlier sections overstate how close we are. Adding
+backbones buys hits linearly; the conjunction is what has to be attacked.
+
+### `max_cycles: 1` starves the search exactly when it is needed ⚠️
+
+`wiggle` and `mutate` only spawn from a parent that cleared the gate. A variant
+that misses on all of cycle 0 therefore gets **no search at all** — 04 and 12
+produced 60 designs where every other variant produced 76, and their search
+branches never ran.
+
+The pipeline silently degenerates to random sampling in precisely the case
+where searching would help most. Four of the eleven scoring variants found
+their best design in a `wiggle` or `mutate` child, so the branches are
+earning their keep where they run. **Raise `max_cycles` next batch.**
+
+### Recycles 3 → 5 made no measurable difference
+
+Three variants have before/after runs at the same benchmark. Pooled cycle-0
+double-hit rate:
+
+| recycles | double hits | designs | rate |
+|---|---|---|---|
+| 3 | 6 | 108 | 5.6% |
+| 5 | 10 | 178 | 5.6% |
+
+Identical. Per-bond rates are flat to better (09's catalytic bond 19% → 37%).
+The three variants moved in *different directions*, which is the shape of
+noise, not of an effect. **Recycles are not the lever.**
+
+### Variant 12's earlier crown was a small-sample artefact ⚠️
+
+12 led at 0.8653 on a 52-design run and scored **zero** on 60 designs here.
+That earlier lead rested on 5 lucky cycle-0 hits out of 36 (1.8 expected). Any
+ranking built on ~36 designs per variant should be treated as provisional —
+including the top-3 selection that drove the earlier parallel batch.
+
+### The distance metric now contradicts §14's conclusion ⚠️ decided deliberately
+
+§14 concluded that **too-close should cost double**, because a clash
+destabilises the complex while a long contact is merely weak. The metric
+shipped for this batch does the opposite: full marks at 2.9 Å, falling to zero
+at 0.5 Å below and 4.5 Å above, so a short deviation costs **0.67×** what the
+same long deviation costs, and only sub-0.5 Å overlap gates.
+
+This was a deliberate team decision, not a regression, and it is recorded here
+because it reverses a documented finding. The §14 reasoning (HG3.17 sits at
+2.53 Å; directed evolution could have gone shorter and did not) has not been
+rebutted — it was overridden. If short contacts start winning the leaderboard,
+this is the first thing to re-examine.
+
+### Hardware, so wall-clock is not misread
+
+Split across RTX 3090 (`eu-g4-*`, 1:06–1:25) and RTX 4090 (`eu-g6-*`,
+0:45–0:55), with two jobs per node on some 3090s. **Runtime differences
+between variants here are the card and node contention, not the biology.**
+Design counts and scores are comparable; elapsed time is not.
+
+### What is committed
+
+Leaderboards, reports, sequences and a config snapshot (`pipeline.yaml`,
+`target.yaml`, `motif.pdb`) for all 13 runs, plus the full
+rfd3/ligandmpnn/boltz artefacts for the **63 designs that cleared the gate**
+— 888 files, 15 MB. The ~230 MB of gated designs stays on Euler under
+`~/pm-live/runs/overnight-NN/`; it is regenerable and was deliberately kept
+out of git history.
+
+---
+
 ## Open and unresolved
 
 | | State |

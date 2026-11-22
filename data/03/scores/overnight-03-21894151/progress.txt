@@ -1,0 +1,13 @@
+run      : overnight-03
+target   : 03_fastrelax_motif_af3
+started  : 2026-11-22T02:43:49+00:00
+updated  : 2026-11-22T04:07:55+00:00
+elapsed  : 1h 24m 06s
+
+designs  : 76
+  scored  : 5
+  gated   : 71
+
+best     : 0.8059  03_fastrelax_motif_af3.03.c01.wiggle.0bbb42
+
+rate     : 1.1 min/design (54 designs/hour)

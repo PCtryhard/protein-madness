@@ -1,0 +1,13 @@
+run      : overnight-02
+target   : 02_fastrelax_motif
+started  : 2026-11-22T02:49:59+00:00
+updated  : 2026-11-22T04:05:18+00:00
+elapsed  : 1h 15m 18s
+
+designs  : 70
+  scored  : 1
+  gated   : 69
+
+best     : 0.2254  02_fastrelax_motif.02.c00.seed.fc424d
+
+rate     : 1.1 min/design (56 designs/hour)
