@@ -1,0 +1,64 @@
+{
+  "weights": {
+    "confidence": 0.15,
+    "hbond": 0.3,
+    "planarity": 0.25,
+    "cat_polarity": 0.15,
+    "apolar_match": 0.15
+  },
+  "min_score": 0.0,
+  "designs": 232,
+  "reference": {
+    "structure": "data/01/inputs/fold_wildtype_ligand_model_0.cif",
+    "partners": [
+      "to_N3 -> ASP203.OD2 @ 2.79 A",
+      "to_N1 -> HIS263.NE2 @ 3.77 A"
+    ],
+    "planarity": 0.6069,
+    "cat_polarity": 0.9403,
+    "apolar_match": 0.9,
+    "ring_rms_planarity": 0.0022,
+    "offsets_A": {
+      "to_N1": 2.35,
+      "to_N3": 0.38
+    },
+    "f_polar_surround": 0.119,
+    "pocket": "ASP203 ILE223 ILE231 VAL258",
+    "caveat": "one reference structure, and cat_polarity was revised after seeing it: a consistency check, not a validation"
+  },
+  "constants": {
+    "out_of_plane_fail_A": 2.0,
+    "catalytic_plane_weight": 2.0,
+    "contact_zone_A": 3.5,
+    "surround_out_A": 8.0,
+    "excess_polar_fail": 6,
+    "apolar_shell_A": 5.0,
+    "apolar_packed_atoms": 8
+  },
+  "ligand": {
+    "ring_atoms": [
+      "N1",
+      "N2",
+      "N3",
+      "C3A",
+      "C4",
+      "C5",
+      "C6",
+      "C7",
+      "C7A"
+    ],
+    "polar_atoms": [
+      "N1",
+      "N2",
+      "N3",
+      "NO1",
+      "O11",
+      "O21"
+    ],
+    "apolar_edge": [
+      "C4",
+      "C6",
+      "C7"
+    ]
+  }
+}

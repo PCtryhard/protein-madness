@@ -1,0 +1,37 @@
+diff --git a/scripts/rerank_geometry.py b/scripts/rerank_geometry.py
+index 55b6ae3..7a75db1 100644
+--- a/scripts/rerank_geometry.py
++++ b/scripts/rerank_geometry.py
+@@ -491,7 +491,32 @@ def num(row: dict, key: str):
+         return None
+ 
+ 
++LEGACY_GEOM_W = {"distance": 0.6, "angle": 0.4}
++
++
+ def old_geometry(row: dict) -> tuple[float, float]:
++    """Patched: handle the pre-fix column layout as well.
++
++    The fastrelax-* runs wrote term_distance/term_angle under
++    weights confidence 0.70 / geometry 0.30 and geometry_weights
++    distance 0.60 / angle 0.40. The original function looked only for
++    term_catalytic/term_non_catalytic/term_angle, so on those rows it
++    found term_angle alone and returned the ANGLE as the whole geometry
++    composite, silently discarding the distance term.
++    """
++    if (num(row, "term_catalytic") is None
++            and num(row, "term_non_catalytic") is None
++            and num(row, "term_distance") is not None):
++        d = num(row, "term_distance") or 0.0
++        a = num(row, "term_angle") or 0.0
++        geometry = (LEGACY_GEOM_W["distance"] * d
++                    + LEGACY_GEOM_W["angle"] * a)
++        conf = num(row, "term_confidence") or 0.0
++        return geometry, 0.7 * conf + 0.3 * geometry
++    return _old_geometry_new_layout(row)
++
++
++def _old_geometry_new_layout(row: dict) -> tuple[float, float]:
+     """Rebuild the shipped geometry composite from the stored terms.
+ 
+     Returned with the total it implies, so the caller can check that against
