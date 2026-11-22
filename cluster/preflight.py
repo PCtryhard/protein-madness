@@ -526,16 +526,34 @@ def _probe_boltz(binary: str) -> str:
 
 
 def check_write_access(report: Report) -> None:
+    """Can this job write into runs/?
+
+    The probe filename carries the pid, because several jobs routinely share
+    one checkout -- nine ran from the same directory on the night this was
+    written. With a fixed name they race: one job unlinks the probe while
+    another is still using it, and the loser reports the directory as
+    unwritable and refuses to start. Variant 10 died that way 30 s in, having
+    passed every other check.
+
+    mkdir(parents=True) for the same reason: two jobs creating runs/ at once
+    must both succeed.
+    """
     runs = ROOT / "runs"
+    probe = runs / f".preflight_write_test.{os.getpid()}"
     try:
-        runs.mkdir(exist_ok=True)
-        probe = runs / ".preflight_write_test"
+        runs.mkdir(parents=True, exist_ok=True)
         probe.write_text("ok", encoding="utf-8")
-        probe.unlink()
         report.add("runs/ writable", OK, str(runs))
     except OSError as exc:
         report.add("runs/ writable", FAIL, f"{runs}: {exc}",
                    "the run directory holds designs.db and every structure")
+    finally:
+        # missing_ok: never fail the check on cleanup of a file whose only
+        # purpose was to prove the write worked.
+        try:
+            probe.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def check_line_endings(report: Report) -> None:
