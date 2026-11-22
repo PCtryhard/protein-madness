@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root { color-scheme: light; box-sizing: border-box; }
+body { margin: 0; font: 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+</style>
+<title>Kemp Pocket Inspector</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.1.0/3Dmol-min.js"></script>
+<style>
+/* Layout: instrument panel — ranking and lineage switches, variant rail, list, dark viewport, readout */
+:root {
+  --bg: #e8ecef; --surface: #ffffff; --ink: #141d24; --ink-soft: #5c6b75;
+  --line: #c9d2d8; --accent: #0a6675; --pass: #1a6e46; --warn: #8a6a12; --fail: #a33a22;
+  --up: #1a6e46; --down: #a33a22;
+  --stage: #10171c; --stage-line: #2a3741;
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1317; --surface: #161f25; --ink: #e4ebef; --ink-soft: #94a5b0;
+    --line: #2b3942; --accent: #4fb9c9; --pass: #5fc38d; --warn: #d6b45c; --fail: #e08268;
+    --up: #5fc38d; --down: #e08268; --stage: #080c0f; --stage-line: #253138; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1317; --surface: #161f25; --ink: #e4ebef; --ink-soft: #94a5b0;
+  --line: #2b3942; --accent: #4fb9c9; --pass: #5fc38d; --warn: #d6b45c; --fail: #e08268;
+  --up: #5fc38d; --down: #e08268; --stage: #080c0f; --stage-line: #253138; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); line-height: 1.5; }
+.wrap { max-width: 1320px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 1.5rem 2.5rem; }
+h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.015em; margin: 0 0 0.2rem; }
+.sub { color: var(--ink-soft); font-size: 0.86rem; margin: 0 0 1.1rem; max-width: 80ch; }
+.sub code { font-family: var(--font-mono); font-size: 0.85em; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 0.8rem 1.6rem; align-items: center; margin-bottom: 0.9rem; }
+.ctl { display: flex; align-items: center; gap: 0.45rem; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.seg button { font: 500 0.76rem/1 var(--font-sans); color: var(--ink); background: var(--surface);
+  border: none; border-right: 1px solid var(--line); padding: 0.5rem 0.7rem; cursor: pointer; }
+.seg button:last-child { border-right: none; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+:root[data-theme="dark"] .seg button[aria-pressed="true"],
+:root:not([data-theme="light"]) .seg button[aria-pressed="true"] { color: #08121a; }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.lbl { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-soft); }
+
+.tabs { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 1rem; }
+.tabs button { font: 500 0.76rem/1 var(--font-mono); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); padding: 0.45rem 0.6rem; border-radius: 3px; cursor: pointer; }
+.tabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .tabs button[aria-pressed="true"],
+:root:not([data-theme="light"]) .tabs button[aria-pressed="true"] { color: #08121a; }
+.tabs .n { opacity: 0.7; }
+
+.cols { display: grid; grid-template-columns: minmax(0, 275px) minmax(0, 1.45fr) minmax(0, 330px); gap: 1rem; align-items: start; }
+@media (max-width: 1100px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; }
+.card h2 { font-size: 0.67rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--ink-soft); margin: 0; padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--line); }
+
+.list { max-height: 560px; overflow-y: auto; }
+@media (max-width: 1100px) { .list { max-height: 300px; } }
+.list button { display: grid; grid-template-columns: 2.4rem 1fr auto; gap: 0.1rem 0.5rem; width: 100%;
+  text-align: left; background: none; border: none; border-bottom: 1px solid var(--line);
+  padding: 0.45rem 0.85rem; cursor: pointer; color: var(--ink); font-family: var(--font-mono); font-size: 0.74rem; }
+.list button:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.list button[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent); }
+.list .rk { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.list .sc { font-variant-numeric: tabular-nums; font-weight: 500; }
+.list .br { grid-column: 2 / -1; font-family: var(--font-sans); font-size: 0.68rem; color: var(--ink-soft); }
+.chg.up { color: var(--up); } .chg.down { color: var(--down); }
+.empty { padding: 1rem 0.85rem; font-size: 0.8rem; color: var(--ink-soft); }
+
+.stage-box { background: var(--stage); border: 1px solid var(--stage-line); border-radius: 4px; overflow: hidden; min-width: 0; }
+#stage { position: relative; width: 100%; height: 520px; }
+@media (max-width: 1100px) { #stage { height: 380px; } }
+#stage canvas { display: block; }
+.loading { position: absolute; inset: 0; display: grid; place-items: center;
+  font: 400 0.8rem var(--font-mono); color: #7b8c97; text-align: center; padding: 1rem; }
+.stage-note { border-top: 1px solid var(--stage-line); padding: 0.5rem 0.75rem;
+  font: 400 0.68rem/1.4 var(--font-mono); color: #7b8c97; display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
+.swatch { display: inline-flex; align-items: center; gap: 0.35rem; }
+.swatch i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+.pad { padding: 0.75rem 0.85rem; }
+.scores { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem; }
+.scorebox { border: 1px solid var(--line); border-radius: 3px; padding: 0.45rem 0.55rem; }
+.scorebox.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.scorebox .lab { font-size: 0.61rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
+.scorebox .val { font-family: var(--font-mono); font-size: 1.3rem; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.scorebox .rk { font-family: var(--font-mono); font-size: 0.69rem; color: var(--ink-soft); }
+table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+td { text-align: left; padding: 0.28rem 0.25rem; border-bottom: 1px solid var(--line); }
+td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+.v-ok { color: var(--pass); } .v-warn { color: var(--warn); } .v-no { color: var(--fail); }
+.files { font-family: var(--font-mono); font-size: 0.7rem; line-height: 1.55; word-break: break-all; }
+.files .k { font-family: var(--font-sans); font-size: 0.62rem; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--ink-soft); display: block; margin-top: 0.4rem; }
+.files .k:first-child { margin-top: 0; }
+.foot { margin-top: 1.4rem; font-size: 0.75rem; color: var(--ink-soft); max-width: 88ch; }
+.foot p { margin: 0 0 0.5rem; }
+.foot code { font-family: var(--font-mono); font-size: 0.9em; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <h1>Kemp Pocket Inspector</h1>
+  <p class="sub">The 232 rescored designs from <code>data/rescored</code> — every scored design in the repo that has a committed structure, across the depth, overnight and fastrelax runs, re-ranked on catalytic geometry by <code>rerank_geometry.py</code>. Names carry the lineage: <code>01_mwm_cce984</code> is variant 01, mutated then wiggled then mutated, hex id <code>cce984</code>.</p>
+
+  <div class="controls">
+    <div class="ctl">
+      <span class="lbl">Rank by</span>
+      <span class="seg" id="seg-rank">
+        <button type="button" id="rk-new" aria-pressed="true">Geometry rerank</button>
+        <button type="button" id="rk-old" aria-pressed="false">Pipeline</button>
+      </span>
+    </div>
+    <div class="ctl">
+      <span class="lbl">Adjustments</span>
+      <span class="seg" id="seg-adj">
+        <button type="button" data-adj="any" aria-pressed="true">any</button>
+        <button type="button" data-adj="0" aria-pressed="false">seed</button>
+        <button type="button" data-adj="1" aria-pressed="false">1</button>
+        <button type="button" data-adj="2" aria-pressed="false">2</button>
+        <button type="button" data-adj="3" aria-pressed="false">3</button>
+      </span>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="cols">
+    <div class="card">
+      <h2 id="list-head">Designs</h2>
+      <div class="list" id="list"></div>
+    </div>
+
+    <div class="stage-box">
+      <div id="stage"><div class="loading" id="loading">loading…</div></div>
+      <div class="stage-note">
+        <span class="swatch"><i style="background:#d9a13b"></i>6NT ligand</span>
+        <span class="swatch"><i style="background:#e0654a"></i>catalytic residues</span>
+        <span class="swatch"><i style="background:#5fb3c4"></i>other pocket sidechains</span>
+        <span class="swatch"><i style="background:#6b7a86"></i>backbone</span>
+        <span>dashed line = catalytic bond, labelled in Å</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 id="d-head">Readout</h2>
+      <div class="pad">
+        <div class="scores">
+          <div class="scorebox" id="box-new">
+            <span class="lab">Geometry rerank</span>
+            <div class="val" id="v-new">—</div>
+            <div class="rk" id="r-new"></div>
+          </div>
+          <div class="scorebox" id="box-old">
+            <span class="lab">Pipeline</span>
+            <div class="val" id="v-old">—</div>
+            <div class="rk" id="r-old"></div>
+          </div>
+        </div>
+      </div>
+      <h2>Catalytic bonds, measured</h2>
+      <div class="pad"><table><tbody id="d-bonds"></tbody></table></div>
+      <h2>Rerank terms</h2>
+      <div class="pad"><table><tbody id="d-terms"></tbody></table></div>
+      <h2>Out-of-plane offset / group angle</h2>
+      <div class="pad"><table><tbody id="d-geom"></tbody></table></div>
+      <h2>Provenance</h2>
+      <div class="pad files" id="d-files"></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <p><strong>Why 232 and not 205.</strong> The first rerank pass skipped every <code>fastrelax-*</code> run, dropping 29 designs including all 12 of variant 12's hits, because the two run families write different score columns. The rescored round fixes that and covers every scored design with a committed structure — 142 depth, 63 overnight, 27 fastrelax. Two of variant 02's fastrelax hits have no structure in the repo and so are absent.</p>
+    <p><strong>Adjustments are not the cycle number.</strong> The search re-expands the seed every cycle, so a design labelled <code>c03</code> may descend from its seed through only one or two actual adjustments — true for 40 of the 232. The filter above counts the real parent chain, which is what the filename encodes.</p>
+    <p><strong>The dashed lines are measured here, not read from a table.</strong> For each design the bond's two atoms are taken from the rerank's own <code>catalytic_residues</code> mapping — <code>lig_n3_to_asp229_od2=ASP232</code> means the target's ASP229 is residue 232 in this design — and the distance is computed straight from the deposited coordinates. All 671 bonds across the 232 designs resolved. Green to 3.5 Å, amber to the 4.5 Å fail threshold, red beyond.</p>
+    <p><strong>Reading the geometry.</strong> Offset is how far the partner atom sits out of the ligand's aromatic plane; the angle is between the partner's own functional-group plane and that same plane. Both matter, and they fail independently: a partner can sit perfectly in-plane while its lone pairs point out of it. Offsets are marked green under 1 Å, amber to the script's 2 Å failure point, red beyond.</p>
+    <p><strong>What this cannot tell you.</strong> Every number here comes from a single Boltz prediction. The repo's own noise control measured seed-to-seed spread on one fixed sequence at ±4 Å and ±28°, and both batches ran with <code>eval_replicates: 1</code>. Differences smaller than that are not resolvable. The rerank's own caveat, from its JSON: one reference structure, and <code>cat_polarity</code> was revised after seeing it — "a consistency check, not a validation."</p>
+  </div>
+</div>
+
+<script>
+const INLINE = null; /*__DATA__*/
+let D = [], BY = {}, VARIANTS = [], rankMode = "new", adjFilter = "any", curVar = "ALL", cur = null, viewer = null;
+const bundles = new Map(), cache = new Map();
+const loading = document.getElementById("loading");
+
+const key = d => rankMode === "new" ? d.rk : d.ork;
+const passAdj = d => adjFilter === "any" || d.adj === parseInt(adjFilter, 10);
+
+function buildIndex() {
+  const rows = D.filter(passAdj);
+  BY = { ALL: rows.slice() };
+  VARIANTS.forEach(v => BY[v] = rows.filter(d => d.v === v));
+  Object.keys(BY).forEach(k => BY[k].sort((a, b) => key(a) - key(b)));
+}
+
+function renderTabs() {
+  const t = document.getElementById("tabs");
+  t.textContent = "";
+  ["ALL"].concat(VARIANTS).forEach(v => {
+    const b = document.createElement("button");
+    b.type = "button"; b.id = "tab-" + v;
+    b.setAttribute("aria-pressed", String(v === curVar));
+    const s = document.createElement("span"); s.textContent = v === "ALL" ? "all" : v;
+    const n = document.createElement("span"); n.className = "n";
+    n.textContent = " " + ((BY[v] || []).length);
+    b.append(s, n);
+    b.addEventListener("click", () => selectVariant(v));
+    t.appendChild(b);
+  });
+}
+
+function renderList() {
+  const l = document.getElementById("list");
+  l.textContent = "";
+  const rows = BY[curVar] || [];
+  document.getElementById("list-head").textContent =
+    (curVar === "ALL" ? "All variants" : "Variant " + curVar) + " — " + rows.length +
+    " by " + (rankMode === "new" ? "rerank" : "pipeline");
+  if (!rows.length) {
+    const p = document.createElement("div");
+    p.className = "empty";
+    p.textContent = "No design in this variant has that many adjustments.";
+    l.appendChild(p);
+    return;
+  }
+  rows.forEach(d => {
+    const b = document.createElement("button");
+    b.type = "button"; b.id = "pick-" + d.f;
+    b.setAttribute("aria-pressed", String(d.f === cur));
+    const rk = document.createElement("span"); rk.className = "rk"; rk.textContent = key(d) + ".";
+    const nm = document.createElement("span"); nm.textContent = d.f;
+    const sc = document.createElement("span"); sc.className = "sc";
+    sc.textContent = rankMode === "new" ? d.new : d.old;
+    const br = document.createElement("span"); br.className = "br";
+    br.textContent = d.batch + " · " + (d.adj === 0 ? "seed" : d.adj + (d.adj === 1 ? " adjustment" : " adjustments")) + "  ";
+    const s = document.createElement("span");
+    s.className = "chg " + (d.chg > 0 ? "up" : (d.chg < 0 ? "down" : ""));
+    s.textContent = d.chg > 0 ? "▲" + d.chg : (d.chg < 0 ? "▼" + Math.abs(d.chg) : "—");
+    br.appendChild(s);
+    b.append(rk, nm, sc, br);
+    b.addEventListener("click", () => select(d.f));
+    l.appendChild(b);
+  });
+}
+
+function rows2(tbody, pairs) {
+  tbody.textContent = "";
+  pairs.forEach(([k, v, c]) => {
+    const tr = document.createElement("tr");
+    const a = document.createElement("td"); a.textContent = k;
+    const b = document.createElement("td"); b.className = "num" + (c ? " " + c : ""); b.textContent = v;
+    tr.append(a, b); tbody.appendChild(tr);
+  });
+}
+const offClass = x => x < 1 ? "v-ok" : (x <= 2 ? "v-warn" : "v-no");
+const distClass = x => x <= 3.5 ? "v-ok" : (x <= 4.5 ? "v-warn" : "v-no");
+const distHex = x => x <= 3.5 ? "#5fc38d" : (x <= 4.5 ? "#d6b45c" : "#e08268");
+const parsePairs = s => (s || "").split(";").map(x => x.trim()).filter(Boolean)
+  .map(x => { const i = x.lastIndexOf("="); return [x.slice(0, i), x.slice(i + 1)]; });
+
+function renderReadout(d) {
+  document.getElementById("d-head").textContent = d.f;
+  document.getElementById("v-new").textContent = d.new;
+  document.getElementById("v-old").textContent = d.old;
+  document.getElementById("r-new").textContent = "rank " + d.rk + " of 232";
+  document.getElementById("r-old").textContent = "rank " + d.ork + " of 232";
+  document.getElementById("box-new").className = "scorebox" + (rankMode === "new" ? " on" : "");
+  document.getElementById("box-old").className = "scorebox" + (rankMode === "old" ? " on" : "");
+
+  rows2(document.getElementById("d-bonds"),
+    (d.bonds || []).length
+      ? d.bonds.map(b => [b.lab, b.d.toFixed(2) + " Å", distClass(b.d)])
+      : [["no bond could be resolved", "—"]]);
+
+  rows2(document.getElementById("d-terms"), [
+    ["confidence × 0.15", d.t[0]], ["h-bond × 0.30", d.t[1]], ["planarity × 0.25", d.t[2]],
+    ["cat. polarity × 0.15", d.t[3]], ["apolar match × 0.15", d.t[4]],
+    ["polar contacts", d.npc + " of " + d.npe + " expected"]
+  ]);
+
+  const offs = Object.fromEntries(parsePairs(d.off));
+  const cops = Object.fromEntries(parsePairs(d.cop));
+  const g = Object.keys(offs).map(k => {
+    const x = parseFloat(offs[k]);
+    return [k.replace("_to_lig", "").replace("lig_n3_to_", "n3 ← "),
+            x.toFixed(2) + " Å / " + (cops[k] || "–") + "°", offClass(x)];
+  });
+  rows2(document.getElementById("d-geom"), g.length ? g : [["no offsets recorded", "—"]]);
+
+  const f = document.getElementById("d-files");
+  f.textContent = "";
+  [["file", d.f + ".cif"], ["lineage", d.lin + "  (cycle " + d.cyc + ", final branch " + d.br + ")"],
+   ["design id", d.id], ["run", d.run],
+   ["catalytic residues", d.cat || "—"], ["site residues", d.site || "—"]].forEach(([k, v]) => {
+    const kk = document.createElement("span"); kk.className = "k"; kk.textContent = k;
+    const vv = document.createElement("span"); vv.textContent = v;
+    f.append(kk, vv);
+  });
+}
+
+function draw(text, d) {
+  if (!viewer) viewer = $3Dmol.createViewer(document.getElementById("stage"), { backgroundColor: "#10171c" });
+  viewer.clear();
+  viewer.addModel(text, "cif");
+  viewer.setStyle({}, { cartoon: { color: "#6b7a86", thickness: 0.3, opacity: 0.92 } });
+  viewer.addStyle({ within: { distance: 5, sel: { resn: "6NT" } }, not: { resn: "6NT" } },
+    { stick: { radius: 0.11, colorscheme: "cyanCarbon" } });
+  const cats = (d.cat || "").split(";").map(s => {
+    const m = s.split("=")[1];
+    return m ? m.trim().replace(/^[A-Z]{3}/, "") : null;
+  }).filter(Boolean);
+  if (cats.length) viewer.addStyle({ resi: cats, not: { resn: "6NT" } },
+    { stick: { radius: 0.2, colorscheme: "redCarbon" } });
+  viewer.setStyle({ resn: "6NT" }, {
+    stick: { radius: 0.18, colorscheme: "yellowCarbon" },
+    sphere: { radius: 0.28, colorscheme: "yellowCarbon" }
+  });
+  (d.bonds || []).forEach(b => {
+    const col = distHex(b.d);
+    viewer.addCylinder({
+      start: { x: b.a[0], y: b.a[1], z: b.a[2] },
+      end:   { x: b.b[0], y: b.b[1], z: b.b[2] },
+      radius: 0.055, dashed: true, dashLength: 0.28, gapLength: 0.2,
+      fromCap: 1, toCap: 1, color: col
+    });
+    viewer.addLabel(b.d.toFixed(2) + " Å", {
+      position: { x: (b.a[0] + b.b[0]) / 2, y: (b.a[1] + b.b[1]) / 2, z: (b.a[2] + b.b[2]) / 2 },
+      fontSize: 11, fontColor: col, fontOpacity: 1,
+      backgroundColor: "#0b1116", backgroundOpacity: 0.78,
+      borderThickness: 0.5, borderColor: col, inFront: true, alignment: "center"
+    });
+  });
+  viewer.zoomTo({ resn: "6NT" });
+  viewer.zoom(0.4);
+  viewer.render();
+}
+
+async function select(f) {
+  const d = D.find(x => x.f === f);
+  if (!d) return;
+  cur = f;
+  (BY[curVar] || []).forEach(x => {
+    const b = document.getElementById("pick-" + x.f);
+    if (b) b.setAttribute("aria-pressed", String(x.f === f));
+  });
+  renderReadout(d);
+  loading.hidden = false;
+  loading.textContent = "loading " + f + "…";
+  try {
+    if (!cache.has(f)) {
+      if (!bundles.has(d.v)) {
+        if (INLINE) {
+          bundles.set(d.v, INLINE.b[d.v] || {});
+        } else {
+          const r = await fetch("b/v" + d.v + ".json");
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          bundles.set(d.v, await r.json());
+        }
+      }
+      const t = bundles.get(d.v)[f];
+      if (!t) throw new Error("not in bundle");
+      cache.set(f, t);
+    }
+    draw(cache.get(f), d);
+    loading.hidden = true;
+  } catch (e) {
+    loading.hidden = false;
+    loading.textContent = "could not load " + f;
+  }
+}
+
+function selectVariant(v) {
+  curVar = v;
+  ["ALL"].concat(VARIANTS).forEach(x => {
+    const b = document.getElementById("tab-" + x);
+    if (b) b.setAttribute("aria-pressed", String(x === v));
+  });
+  renderList();
+  const rows = BY[v] || [];
+  if (rows.length) select(rows[0].f);
+}
+
+function refresh() {
+  buildIndex();
+  renderTabs();
+  if (!(BY[curVar] || []).length) curVar = "ALL";
+  renderList();
+  const rows = BY[curVar] || [];
+  if (rows.length && !rows.some(r => r.f === cur)) select(rows[0].f);
+  else { const d = D.find(x => x.f === cur); if (d) renderReadout(d); }
+}
+
+async function boot() {
+  try {
+    D = INLINE ? INLINE.designs : await fetch("designs.json").then(r => r.json());
+    VARIANTS = [...new Set(D.map(d => d.v))].sort();
+    document.getElementById("rk-new").addEventListener("click", () => { rankMode = "new";
+      document.getElementById("rk-new").setAttribute("aria-pressed", "true");
+      document.getElementById("rk-old").setAttribute("aria-pressed", "false"); refresh(); });
+    document.getElementById("rk-old").addEventListener("click", () => { rankMode = "old";
+      document.getElementById("rk-old").setAttribute("aria-pressed", "true");
+      document.getElementById("rk-new").setAttribute("aria-pressed", "false"); refresh(); });
+    document.querySelectorAll("#seg-adj button").forEach(b => b.addEventListener("click", () => {
+      adjFilter = b.dataset.adj;
+      document.querySelectorAll("#seg-adj button").forEach(x =>
+        x.setAttribute("aria-pressed", String(x === b)));
+      refresh();
+    }));
+    buildIndex();
+    renderTabs();
+    selectVariant("ALL");
+  } catch (e) {
+    loading.textContent = "could not load the design index";
+  }
+}
+boot();
+</script>
+
+</body>
+</html>
