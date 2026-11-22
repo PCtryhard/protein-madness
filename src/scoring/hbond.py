@@ -215,28 +215,40 @@ def measure_all(
 
 
 def distance_term(distance: float, cfg: DistanceCfg) -> float:
-    """Per-bond distance score, 1 best. ONE-SIDED: short is not penalised.
+    """Per-bond distance score, 1 best. ASYMMETRIC: short costs less than long.
 
-        d = 1                                        r <= ideal
-        d = clip(1 - (r - ideal) / (tol - ideal), 0, 1)   r >  ideal
+        d = clip(1 - (ideal - r) / (ideal - clash), 0, 1)   r <  ideal
+        d = clip(1 - (r - ideal) / (tol  - ideal),  0, 1)   r >= ideal
 
-    Being closer than `ideal` scores full marks. Only `clash` penalises a short
-    contact, and it does so by gating rather than by shading the term, so there
-    is no band where a design loses points for holding its partner tightly.
+    Both sides fall linearly to zero, but over different spans: down to
+    `clash` on the short side and up to `tolerated` on the long one. With the
+    shipped 0.5 / 2.9 / 4.5 that is 2.4 A of room below against 1.6 A above,
+    so the same deviation costs 1.6/2.4 = two thirds as much when a bond is
+    too close as when it is too long.
 
-    This was symmetric about the ideal, which meant a 2.4 A contact scored the
-    same as a 3.4 A one. The team's position is that a close hydrogen bond is
-    not a worse hydrogen bond, so the penalty now applies only as the contact
-    stretches.
+        2.4 A  (0.5 under)  ->  0.79       3.4 A  (0.5 over)  ->  0.69
+        2.0 A  (0.9 under)  ->  0.63       3.8 A  (0.9 over)  ->  0.44
+
+    The history matters for reading the numbers. It was symmetric about
+    `ideal`, which penalised 2.4 A exactly like 3.4 A. Then it was made flat
+    below `ideal`, which stopped penalising closeness at all. This is the
+    middle the team asked for: a close contact is worse than an ideal one, but
+    not as bad as a stretched one by the same margin.
+
+    Anchoring the short span on `clash` keeps the two ends honest -- the term
+    reaches zero exactly where each gate fires, so nothing scores above zero
+    on a distance the gate would reject.
     """
-    span = cfg.tolerated - cfg.ideal
+    if distance >= cfg.ideal:
+        span = cfg.tolerated - cfg.ideal
+        if span <= 0:
+            return 1.0 if distance == cfg.ideal else 0.0
+        return max(0.0, min(1.0, 1.0 - (distance - cfg.ideal) / span))
+
+    span = cfg.ideal - cfg.clash
     if span <= 0:
-        # Degenerate window: everything at or under `ideal` is full marks and
-        # anything beyond it is zero, rather than a divide-by-zero.
-        return 1.0 if distance <= cfg.ideal else 0.0
-    if distance <= cfg.ideal:
         return 1.0
-    return max(0.0, min(1.0, 1.0 - (distance - cfg.ideal) / span))
+    return max(0.0, min(1.0, 1.0 - (cfg.ideal - distance) / span))
 
 
 def angle_term(angle: float, ideal: float, cfg: AngleCfg) -> float:

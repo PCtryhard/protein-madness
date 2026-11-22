@@ -130,14 +130,19 @@ scoring:
     metric: complex_ipde
     ipde_best: 0.5
     ipde_worst: 5.0
-  # The metric spans 0.5-4.5 A and penalises only stretching. A bond at or
-  # under `ideal` scores 1.0: a close hydrogen bond is not a worse hydrogen
-  # bond. The only short-side penalty is `clash`, which gates outright.
+  # The metric spans 0.5-4.5 A and is ASYMMETRIC about `ideal`: both sides
+  # fall linearly to zero, but the short side has 2.4 A of room against the
+  # long side's 1.6 A. So a bond that is too close by some margin keeps two
+  # thirds more of its score than one that is too long by the same margin --
+  # penalised, but less than stretching.
+  #
+  #   2.4 A (0.5 under) -> 0.79        3.4 A (0.5 over) -> 0.69
+  #   2.0 A (0.9 under) -> 0.63        3.8 A (0.9 over) -> 0.44
   distance:
-    ideal: 2.9        # full marks at and below this
-    tolerated: 4.5    # term reaches zero here, where the gate also fires
+    ideal: 2.9        # full marks here, and only here
+    tolerated: 4.5    # term reaches zero here, where the long gate fires
     fail: 4.5         # beyond this a required bond gates the design
-    clash: 0.5        # below this it gates as an overlap
+    clash: 0.5        # term reaches zero here too, and it gates as an overlap
   angle:
     tolerance: 60.0
     rule: acceptor_side_always
