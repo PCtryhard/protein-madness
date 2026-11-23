@@ -434,7 +434,11 @@ def test_cluster_paths_expand_environment_variables(monkeypatch):
     for value in (cfg.rfd3.binary, cfg.rfd3.checkpoint,
                   cfg.ligandmpnn.run_script, cfg.boltz.binary):
         assert "$" not in value, value
-        assert "malexandrov" not in value, f"hardcoded user in {value}"
+        # No individual is named here: an expanded path that still points into
+        # /cluster/home or /cluster/scratch is one person's account, whoever
+        # they are.
+        assert "/cluster/home/" not in value, f"hardcoded user in {value}"
+        assert "/cluster/scratch/" not in value, f"hardcoded user in {value}"
 
 
 def test_the_pipeline_config_names_no_individual():

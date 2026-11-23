@@ -1,6 +1,6 @@
 {
   "06_asn_glu_his_06": {
-    "input": "/cluster/home/kg2616897/protein-madness/data/06/inputs/fastrelax-06-21884107/motif.pdb",
+    "input": "/cluster/home/teammate1/protein-madness/data/06/inputs/fastrelax-06-21884107/motif.pdb",
     "unindex": "A229,A261,A291",
     "select_fixed_atoms": {
       "A229": "OE1,CD,OE2",

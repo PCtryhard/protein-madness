@@ -81,7 +81,7 @@ def read_cif_atoms(path):
     whitespace split is enough; this is not a general mmCIF parser.
     """
     header, start = [], None
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         lines = fh.read().splitlines()
     for i, line in enumerate(lines):
         if line.startswith("_atom_site."):
@@ -153,9 +153,9 @@ def load_rows(rescored):
     for path in (manifest_path, rerank_path):
         if not os.path.exists(path):
             sys.exit(f"missing {path}\nRun this from a checkout that has data/rescored/.")
-    with open(manifest_path) as fh:
+    with open(manifest_path, newline="", encoding="utf-8") as fh:
         manifest = {r["design_id"]: r for r in csv.DictReader(fh)}
-    with open(rerank_path) as fh:
+    with open(rerank_path, newline="", encoding="utf-8") as fh:
         rerank = list(csv.DictReader(fh))
     orphans = [r["design_id"] for r in rerank if r["design_id"] not in manifest]
     if orphans:
@@ -214,7 +214,7 @@ def read_structures(rescored, designs):
     cif_dir = os.path.join(rescored, "cif")
     bundles = {}
     for d in designs:
-        with open(os.path.join(cif_dir, d["f"] + ".cif")) as fh:
+        with open(os.path.join(cif_dir, d["f"] + ".cif"), encoding="utf-8") as fh:
             bundles.setdefault(d["v"], {})[d["f"]] = fh.read()
     return bundles
 
@@ -227,7 +227,7 @@ def write_single_file(template, designs, bundles, out_dir):
     html = template.replace("const INLINE = null; /*__DATA__*/",
                             "const INLINE = " + payload + ";", 1)
     path = os.path.join(out_dir, "pocket_inspector.html")
-    with open(path, "w") as fh:
+    with open(path, "w", encoding="utf-8") as fh:
         fh.write(html)
     return [path]
 
@@ -235,18 +235,18 @@ def write_single_file(template, designs, bundles, out_dir):
 def write_split(template, designs, bundles, out_dir):
     written = []
     index = os.path.join(out_dir, "index.html")
-    with open(index, "w") as fh:
+    with open(index, "w", encoding="utf-8") as fh:
         fh.write(template)
     written.append(index)
     path = os.path.join(out_dir, "designs.json")
-    with open(path, "w") as fh:
+    with open(path, "w", encoding="utf-8") as fh:
         json.dump(designs, fh, separators=(",", ":"))
     written.append(path)
     bundle_dir = os.path.join(out_dir, "b")
     os.makedirs(bundle_dir, exist_ok=True)
     for variant, group in sorted(bundles.items()):
         path = os.path.join(bundle_dir, f"v{variant}.json")
-        with open(path, "w") as fh:
+        with open(path, "w", encoding="utf-8") as fh:
             json.dump(group, fh, separators=(",", ":"))
         written.append(path)
     return written
@@ -266,7 +266,7 @@ def write_online(template, base, out_dir):
     html = template.replace("const REMOTE = null; /*__REMOTE__*/",
                             "const REMOTE = " + json.dumps(base) + ";", 1)
     path = os.path.join(out_dir, "pocket_inspector_online.html")
-    with open(path, "w") as fh:
+    with open(path, "w", encoding="utf-8") as fh:
         fh.write(html)
     return [path]
 
@@ -291,7 +291,7 @@ def main():
     template_path = os.path.join(HERE, "template.html")
     if not os.path.exists(template_path):
         sys.exit(f"missing {template_path}")
-    with open(template_path) as fh:
+    with open(template_path, encoding="utf-8") as fh:
         template = fh.read()
 
     os.makedirs(args.out, exist_ok=True)

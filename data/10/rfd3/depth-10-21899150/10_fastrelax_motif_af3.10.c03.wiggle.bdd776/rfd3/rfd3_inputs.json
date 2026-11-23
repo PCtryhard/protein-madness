@@ -1,6 +1,6 @@
 {
   "10_fastrelax_motif_af3_10_wiggle": {
-    "input": "/cluster/home/malexandrov/pm-live/runs/depth-10/structures/10_fastrelax_motif_af3.10.c00.seed/rfd3/rfd3_inputs_10_fastrelax_motif_af3_10_4_model_0.pdb",
+    "input": "/cluster/home/clusteruser/pm-live/runs/depth-10/structures/10_fastrelax_motif_af3.10.c00.seed/rfd3/rfd3_inputs_10_fastrelax_motif_af3_10_4_model_0.pdb",
     "unindex": "A202,A232,A146",
     "select_fixed_atoms": {
       "6NT": "ALL",

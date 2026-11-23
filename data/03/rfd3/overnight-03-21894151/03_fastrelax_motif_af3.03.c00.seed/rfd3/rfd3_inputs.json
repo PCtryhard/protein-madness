@@ -1,6 +1,6 @@
 {
   "03_fastrelax_motif_af3_03": {
-    "input": "/cluster/home/malexandrov/pm-live/data/03/inputs/03_fastrelax_motif_af3.pdb",
+    "input": "/cluster/home/clusteruser/pm-live/data/03/inputs/03_fastrelax_motif_af3.pdb",
     "unindex": "A229,A261,A291",
     "select_fixed_atoms": {
       "A229": "OD1,CG,OD2",

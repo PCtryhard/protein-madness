@@ -323,3 +323,48 @@ made tolerant of a refusal so that one data problem does not show up as two
 failures. The reference target for the geometry assertions moved from variant
 01 to variant 04, which still has the crystal ASP229 contact; `tests/paths.py`
 names it in one place.
+
+---
+
+**2026-11-23 — Post-challenge cleanup: no cluster account name is committed, and nothing was deleted.**
+The challenge is over and the final 20 designs were selected by hand, so the
+repo became an archive. Two changes, both deliberate:
+
+*Account names.* The two real Euler accounts that ran the batches appeared
+10,426 times across 874 tracked files — mostly inside `model_path=` and
+`--out_folder` strings that LigandMPNN, RFD3 and Boltz-2 write into their own
+output as provenance. They are now placeholders:
+
+| was | is | where |
+| --- | --- | --- |
+| one account | `clusteruser` | 7,263 occurrences |
+| the other | `teammate1` | 3,001 occurrences |
+
+Each placeholder is the same byte length as the name it replaced, so the 12
+sqlite stores under `data/final_run_60/` were rewritten in place without
+shifting a page offset; `pragma integrity_check` passes on all 12 and their
+rows still read. `EULER.md` instead uses a real `$ETH_USER` variable, set once
+per shell, because a login command has to stay usable. The two distinct
+placeholders are kept distinct on purpose: which account ran which batch is
+real provenance, and collapsing both to one name would have destroyed it.
+Why: the repo can be made public, and a cluster login name is a credential
+half and a personal identifier. `config/pipeline.yaml` never had one —
+`test_the_pipeline_config_names_no_individual` is what kept it that way — but
+the run artifacts did, and nothing was checking them.
+`test_cluster_paths_expand_environment_variables` no longer greps for one
+person's name; it asserts no expanded tool path points into `/cluster/home/`
+or `/cluster/scratch/` at all, which is the property that actually matters.
+
+**Not done: git history still carries five contributors' names and personal
+email addresses in its commit authorship**, which is the normal state for a git
+repo and cannot be changed without rewriting all 165 commits, breaking every
+existing clone and every SHA referenced from RUNLOG.md. That is a call for the
+people named, not a cleanup step.
+
+*Moves, not deletions.* `HANDOFF.md` (the refold procedure, since spent),
+`cluster/aws/` (never submitted), `results/smoke/` (the previous pipeline's
+output) and `setup-perlin.log` moved under `outdated/`, which already held the
+previous pipeline. Why: this repo's value now is the record of what was run,
+and a reader cannot tell a spent procedure from a live one when both sit in the
+root. `outdated/` already meant "kept, not maintained", so it is the honest
+place for them, and `git log --follow` still reaches their history.

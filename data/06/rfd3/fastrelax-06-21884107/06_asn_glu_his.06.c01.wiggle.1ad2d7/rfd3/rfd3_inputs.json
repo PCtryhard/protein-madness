@@ -1,6 +1,6 @@
 {
   "06_asn_glu_his_06_wiggle": {
-    "input": "/cluster/home/kg2616897/protein-madness/runs/fastrelax-06-21884107/structures/06_asn_glu_his.06.c00.seed/rfd3/rfd3_inputs_06_asn_glu_his_06_2_model_0.pdb",
+    "input": "/cluster/home/teammate1/protein-madness/runs/fastrelax-06-21884107/structures/06_asn_glu_his.06.c00.seed/rfd3/rfd3_inputs_06_asn_glu_his_06_2_model_0.pdb",
     "unindex": "A236,A10,A104",
     "select_fixed_atoms": {
       "6NT": "ALL",

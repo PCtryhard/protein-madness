@@ -12,6 +12,19 @@ seed PDB  →  RFD3  →  LigandMPNN  →  Boltz-2  →  H-bond scorer  →  lea
 
 ---
 
+## 0. Set your username
+
+Every command below logs in as `$ETH_USER`, so set it once per shell to your
+own NETHZ name. No account name is committed to this repo.
+
+```powershell
+$ETH_USER = "your-nethz"
+```
+
+In bash, `export ETH_USER=your-nethz` instead.
+
+---
+
 ## 1. Deploy the code
 
 The clone at `~/protein-madness` is HTTPS with no stored credentials, so it
@@ -20,7 +33,7 @@ The clone at `~/protein-madness` is HTTPS with no stored credentials, so it
 destroy deployed code. Deploy to a fresh directory instead:
 
 ```powershell
-git archive --format=tar --prefix=pm-deploy/ HEAD | ssh malexandrov@euler.ethz.ch "tar x -C ~"
+git archive --format=tar --prefix=pm-deploy/ HEAD | ssh $ETH_USER@euler.ethz.ch "tar x -C ~"
 ```
 
 Tracked files only, ~36 MB, seed PDB included.
@@ -35,7 +48,7 @@ not work.
 **Login node only** — compute nodes have no outbound internet.
 
 ```powershell
-ssh malexandrov@euler.ethz.ch "cd ~/pm-deploy && bash cluster/euler/setup_rfd3.sh && bash cluster/euler/setup_ligandmpnn.sh && bash cluster/euler/setup_boltz.sh"
+ssh $ETH_USER@euler.ethz.ch "cd ~/pm-deploy && bash cluster/euler/setup_rfd3.sh && bash cluster/euler/setup_ligandmpnn.sh && bash cluster/euler/setup_boltz.sh"
 ```
 
 | env | Python | holds |
@@ -51,7 +64,7 @@ resolves to one with no torch, which cost a job.
 ## 3. Stage the weights and tools
 
 ```powershell
-ssh malexandrov@euler.ethz.ch "cd ~/pm-deploy && bash cluster/euler/stage_deps.sh"
+ssh $ETH_USER@euler.ethz.ch "cd ~/pm-deploy && bash cluster/euler/stage_deps.sh"
 ```
 
 Fetches LigandMPNN (MIT) and its weights, downloads the Boltz-2 weights **on
@@ -75,7 +88,7 @@ Then re-run `stage_deps.sh` to check the checksums. `$SCRATCH` is purged after
 Every job failure so far was a setup error one of these catches, for free:
 
 ```powershell
-ssh malexandrov@euler.ethz.ch "cd ~/pm-deploy && PYTHONPATH=. ~/pm-rfd3-env/bin/python cluster/preflight.py --target config/targets/01_his_asp.yaml"
+ssh $ETH_USER@euler.ethz.ch "cd ~/pm-deploy && PYTHONPATH=. ~/pm-rfd3-env/bin/python cluster/preflight.py --target config/targets/01_his_asp.yaml"
 ```
 
 Resolves every tool path, checks the RFD3 checkpoint and Boltz assets, and
@@ -84,7 +97,7 @@ the file exists. Expect `PREFLIGHT PASSED` with one `WARN cuda` (no GPU on a
 login node; fine).
 
 ```powershell
-ssh malexandrov@euler.ethz.ch "cd ~/pm-deploy && PYTHONPATH=. ~/pm-rfd3-env/bin/python -m src.cli -v smoke --target config/targets/01_his_asp.yaml"
+ssh $ETH_USER@euler.ethz.ch "cd ~/pm-deploy && PYTHONPATH=. ~/pm-rfd3-env/bin/python -m src.cli -v smoke --target config/targets/01_his_asp.yaml"
 ```
 
 `-v` goes **before** the subcommand. Smoke validates the configs and the motif;
@@ -93,7 +106,7 @@ it does *not* check tool paths, so it is not a substitute for preflight.
 Tests need a `python` on `PATH`, which Euler's modules do not provide:
 
 ```powershell
-ssh malexandrov@euler.ethz.ch "mkdir -p ~/.pmbin && ln -sf \$(which python3) ~/.pmbin/python && cd ~/pm-deploy && PATH=\$HOME/.pmbin:\$PATH PYTHONPATH=. ~/pm-rfd3-env/bin/python -m pytest -q"
+ssh $ETH_USER@euler.ethz.ch "mkdir -p ~/.pmbin && ln -sf \$(which python3) ~/.pmbin/python && cd ~/pm-deploy && PATH=\$HOME/.pmbin:\$PATH PYTHONPATH=. ~/pm-rfd3-env/bin/python -m pytest -q"
 ```
 
 ## 5. Submit
@@ -102,7 +115,7 @@ One script, parameterised by environment variable. `sbatch` is the SLURM
 command; `run.sbatch` is the job script it takes.
 
 ```powershell
-ssh malexandrov@euler.ethz.ch "cd ~/pm-deploy && PM_REPO=\$HOME/pm-deploy sbatch cluster/euler/run.sbatch"
+ssh $ETH_USER@euler.ethz.ch "cd ~/pm-deploy && PM_REPO=\$HOME/pm-deploy sbatch cluster/euler/run.sbatch"
 ```
 
 | variable | default | meaning |
@@ -121,7 +134,7 @@ A smaller config goes **outside `config/`** — `tests/test_config.py` enforces
 exactly one pipeline config in that directory, deliberately:
 
 ```powershell
-ssh malexandrov@euler.ethz.ch "cd ~/pm-deploy && PM_CONFIG=\$HOME/pm-runconf/fast.yaml PM_NAME=fast-01 sbatch cluster/euler/run.sbatch"
+ssh $ETH_USER@euler.ethz.ch "cd ~/pm-deploy && PM_CONFIG=\$HOME/pm-runconf/fast.yaml PM_NAME=fast-01 sbatch cluster/euler/run.sbatch"
 ```
 
 **Do not "optimise" `boltz.no_kernels` or `boltz.precision`.** Euler's GPU pool
@@ -135,7 +148,7 @@ log is in `$HOME` and so readable from any login node — unlike `/tmp`, which i
 node-local.
 
 ```powershell
-ssh malexandrov@euler.ethz.ch "tail -f ~/pm-deploy/runs/euler-01/progress.txt"
+ssh $ETH_USER@euler.ethz.ch "tail -f ~/pm-deploy/runs/euler-01/progress.txt"
 ```
 
 `runs/<name>/` holds `designs.csv` (a row per scored design, distance and angle
@@ -143,7 +156,7 @@ per bond), `sequences.fasta`, `progress.txt`, `stages.jsonl` (every command,
 return code, wall time), `designs.db` and `report.md`.
 
 ```powershell
-ssh malexandrov@euler.ethz.ch "cd ~/pm-deploy && PYTHONPATH=. ~/pm-rfd3-env/bin/python -m src.cli report --run runs/euler-01 --write"
+ssh $ETH_USER@euler.ethz.ch "cd ~/pm-deploy && PYTHONPATH=. ~/pm-rfd3-env/bin/python -m src.cli report --run runs/euler-01 --write"
 ```
 
 ### Reading the numbers honestly

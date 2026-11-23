@@ -42,7 +42,7 @@
         ]
     },
     "specification": {
-        "input": "/cluster/home/kg2616897/protein-madness/data/06/inputs/fastrelax-06-21884107/motif.pdb",
+        "input": "/cluster/home/teammate1/protein-madness/data/06/inputs/fastrelax-06-21884107/motif.pdb",
         "contig": "260-260",
         "unindex": "A229,A261,A291",
         "ligand": "6NT",
@@ -65,6 +65,6 @@
         },
         "select_unfixed_sequence": false
     },
-    "ckpt_path": "/cluster/scratch/kg2616897/pm-perlin/weights/rfd3/rfd3_latest.ckpt",
+    "ckpt_path": "/cluster/scratch/teammate1/pm-perlin/weights/rfd3/rfd3_latest.ckpt",
     "seed": 1
 }

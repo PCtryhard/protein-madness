@@ -1,7 +1,7 @@
 name: 01_fastrelax_motif_af3
 seeds:
 - id: '01'
-  pdb: /cluster/home/kg2616897/protein-madness/data/01/rfd3/overnight-01-21894353/01_fastrelax_motif_af3.01.c00.seed/rfd3/rfd3_inputs_01_fastrelax_motif_af3_01_12_model_0.pdb
+  pdb: /cluster/home/teammate1/protein-madness/data/01/rfd3/overnight-01-21894353/01_fastrelax_motif_af3.01.c00.seed/rfd3/rfd3_inputs_01_fastrelax_motif_af3_01_12_model_0.pdb
   contig: 260-260
 ligand:
   id: 6NT
