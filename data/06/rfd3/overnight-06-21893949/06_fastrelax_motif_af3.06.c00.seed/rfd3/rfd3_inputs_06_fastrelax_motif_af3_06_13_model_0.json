@@ -42,7 +42,7 @@
         ]
     },
     "specification": {
-        "input": "/cluster/home/malexandrov/pm-live/data/06/inputs/06_fastrelax_motif_af3.pdb",
+        "input": "/cluster/home/clusteruser/pm-live/data/06/inputs/06_fastrelax_motif_af3.pdb",
         "contig": "260-260",
         "unindex": "A229,A261,A291",
         "ligand": "6NT",
@@ -65,6 +65,6 @@
         },
         "select_unfixed_sequence": false
     },
-    "ckpt_path": "/cluster/scratch/malexandrov/pdh/weights/rfd3/rfd3_latest.ckpt",
+    "ckpt_path": "/cluster/scratch/clusteruser/pdh/weights/rfd3/rfd3_latest.ckpt",
     "seed": 1
 }

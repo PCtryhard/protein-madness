@@ -1,6 +1,6 @@
 {
   "02_his_asp_his_02": {
-    "input": "/cluster/home/kg2616897/protein-madness/data/02/inputs/fastrelax-02-21879376/motif.pdb",
+    "input": "/cluster/home/teammate1/protein-madness/data/02/inputs/fastrelax-02-21879376/motif.pdb",
     "unindex": "A229,A261,A291",
     "select_fixed_atoms": {
       "A229": "OD1,CG,OD2",

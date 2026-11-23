@@ -91,20 +91,22 @@ The reservation used for the hackathon was `ws_49734_gpu`; the `--account` and
 `--reservation` lines in the script are commented out, so uncomment them if you
 still have it.
 
-## The provided AWS cluster
+## The provided AWS cluster — archived, never submitted
 
 No scheduler, two GPUs, and the provided tooling already installed under
-`/mnt/ref`.
+`/mnt/ref`. Euler is what the production batches ran on, so these two scripts
+now live in [outdated/cluster/aws/](../outdated/cluster/aws/) and the paths
+below are relative to there:
 
 ```bash
-bash cluster/aws/setup.sh                        # builds the venv, finds the tools
+bash outdated/cluster/aws/setup.sh                # builds the venv, finds the tools
 source ~/protein-madness-env/activate.sh
 python cluster/preflight.py --require-gpu --write runs/hardware_notes.md
-bash cluster/aws/run_all.sh --dry-run
-bash cluster/aws/run_all.sh
+bash outdated/cluster/aws/run_all.sh --dry-run
+bash outdated/cluster/aws/run_all.sh
 ```
 
-`run_all.sh` runs the seven **one at a time**, each using both cards. That is
+`run_all.sh` runs them **one at a time**, each using both cards. That is
 deliberate: the pipeline's own worker pool already puts one design on each GPU,
 so two concurrent runs would put two models on one card. 12 GB is not 24 GB,
 and Boltz-2 on a ~270-token system is near the limit of one card by itself.

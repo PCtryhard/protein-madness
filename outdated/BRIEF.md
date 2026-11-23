@@ -757,7 +757,7 @@ Euler can start producing triage folds before it passes.
 
 ### 8.3 What Euler actually is — surveyed, not guessed
 
-Logged in as `malexandrov@euler.ethz.ch` (key auth works). Hard facts:
+Logged in as `clusteruser@euler.ethz.ch` (key auth works). Hard facts:
 
 **Share: `es_workshop`** — 80 CPU cores, 1024 GiB RAM, **32 GPUs**. Associations
 exist for `gpu`, `gpuhe`, `gpupr`, `hpc` and `bigmem`.

@@ -1,6 +1,6 @@
 {
   "5FQJ_5A": {
-    "input": "/cluster/home/kg2616897/protein-madness/runs/5fqj/5A.pdb",
+    "input": "/cluster/home/teammate1/protein-madness/runs/5fqj/5A.pdb",
     "contig": "260-260",
     "unindex": "A48,A225,A226,A229,A250,A252,A254,A256,A259,A261,A286,A287,A290,A291",
     "select_fixed_atoms": {

@@ -8,17 +8,17 @@ run:
   min_delta: 0.005
   eval_replicates: 1
 rfd3:
-  binary: /cluster/home/kg2616897/pm-perlin-envs/rfd3/bin/rfd3
-  checkpoint: /cluster/scratch/kg2616897/pm-perlin/weights/rfd3/rfd3_latest.ckpt
+  binary: /cluster/home/teammate1/pm-perlin-envs/rfd3/bin/rfd3
+  checkpoint: /cluster/scratch/teammate1/pm-perlin/weights/rfd3/rfd3_latest.ckpt
   n_batches: 5
   diffusion_batch_size: 1
   partial_t: 2.0
   extra_args: []
 rfdiffusion: null
 ligandmpnn:
-  run_script: /cluster/home/kg2616897/pm-perlin-envs/ligandmpnn_adapter.py
-  python: /cluster/home/kg2616897/protein-madness-env/bin/python
-  checkpoint: /cluster/scratch/kg2616897/pm-perlin/weights/ligandmpnn_v_32_010_25.pt
+  run_script: /cluster/home/teammate1/pm-perlin-envs/ligandmpnn_adapter.py
+  python: /cluster/home/teammate1/protein-madness-env/bin/python
+  checkpoint: /cluster/scratch/teammate1/pm-perlin/weights/ligandmpnn_v_32_010_25.pt
   temperature: 0.1
   sequences_per_backbone: 3
   omit_AA: CX
@@ -26,8 +26,8 @@ ligandmpnn:
   use_atom_context: true
   use_side_chain_context: true
 boltz:
-  binary: /cluster/home/kg2616897/pm-perlin-envs/boltz2/bin/boltz
-  cache_dir: /cluster/scratch/kg2616897/pm-perlin/boltz-cache
+  binary: /cluster/home/teammate1/pm-perlin-envs/boltz2/bin/boltz
+  cache_dir: /cluster/scratch/teammate1/pm-perlin/boltz-cache
   assets_dir: null
   recycling_steps: 3
   diffusion_samples: 1

@@ -1,6 +1,6 @@
 {
   "10_fastrelax_motif_af3_10_wiggle": {
-    "input": "/cluster/home/kg2616897/protein-madness/data/10/rfd3/overnight-10-21894359/10_fastrelax_motif_af3.10.c00.seed/rfd3/rfd3_inputs_10_fastrelax_motif_af3_10_18_model_0.pdb",
+    "input": "/cluster/home/teammate1/protein-madness/data/10/rfd3/overnight-10-21894359/10_fastrelax_motif_af3.10.c00.seed/rfd3/rfd3_inputs_10_fastrelax_motif_af3_10_18_model_0.pdb",
     "unindex": "A105,A110,A19",
     "select_fixed_atoms": {
       "6NT": "ALL",

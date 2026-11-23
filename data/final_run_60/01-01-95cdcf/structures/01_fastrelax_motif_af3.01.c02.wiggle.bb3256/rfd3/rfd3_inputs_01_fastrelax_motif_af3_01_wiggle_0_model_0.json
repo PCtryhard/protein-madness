@@ -40,7 +40,7 @@
         ]
     },
     "specification": {
-        "input": "/cluster/home/kg2616897/protein-madness/data/01/rfd3/overnight-01-21894353/01_fastrelax_motif_af3.01.c00.seed/rfd3/rfd3_inputs_01_fastrelax_motif_af3_01_12_model_0.pdb",
+        "input": "/cluster/home/teammate1/protein-madness/data/01/rfd3/overnight-01-21894353/01_fastrelax_motif_af3.01.c00.seed/rfd3/rfd3_inputs_01_fastrelax_motif_af3_01_12_model_0.pdb",
         "unindex": "A232,A48",
         "ligand": "6NT",
         "extra": {
@@ -61,6 +61,6 @@
         "select_unfixed_sequence": false,
         "partial_t": 2.0
     },
-    "ckpt_path": "/cluster/scratch/kg2616897/pm-perlin/weights/rfd3/rfd3_latest.ckpt",
+    "ckpt_path": "/cluster/scratch/teammate1/pm-perlin/weights/rfd3/rfd3_latest.ckpt",
     "seed": 2
 }

@@ -1,6 +1,6 @@
 {
   "01_fastrelax_motif_af3_01_wiggle": {
-    "input": "/cluster/home/kg2616897/protein-madness/data/final_run_60/09-01-831b9f/structures/01_fastrelax_motif_af3.01.c03.wiggle.660e17/rfd3/rfd3_inputs_01_fastrelax_motif_af3_01_wiggle_0_model_0.pdb",
+    "input": "/cluster/home/teammate1/protein-madness/data/final_run_60/09-01-831b9f/structures/01_fastrelax_motif_af3.01.c03.wiggle.660e17/rfd3/rfd3_inputs_01_fastrelax_motif_af3_01_wiggle_0_model_0.pdb",
     "unindex": "A232,A48",
     "select_fixed_atoms": {
       "6NT": "ALL",

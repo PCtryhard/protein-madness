@@ -11,7 +11,7 @@ empty directory and start with: `read CLAUDE_CODE_BRIEF.md and execute it`.
 - `TEAM_MEMBERS` (names + what each wants to own): <FILL IN>
 - `GITHUB_REMOTE`: <FILL IN or "none, local only for now">
 - `MY_MACHINE`: <FILL IN: macOS/Linux, GPU or not, RAM>
-- `ETH_USER`: malexandrov
+- `ETH_USER`: clusteruser
 
 Everything else below is fixed.
 

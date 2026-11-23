@@ -42,7 +42,7 @@
         ]
     },
     "specification": {
-        "input": "/cluster/home/malexandrov/pm-live/runs/depth-10/structures/10_fastrelax_motif_af3.10.c00.seed/rfd3/rfd3_inputs_10_fastrelax_motif_af3_10_11_model_0.pdb",
+        "input": "/cluster/home/clusteruser/pm-live/runs/depth-10/structures/10_fastrelax_motif_af3.10.c00.seed/rfd3/rfd3_inputs_10_fastrelax_motif_af3_10_11_model_0.pdb",
         "unindex": "A181,A116,A103",
         "ligand": "6NT",
         "extra": {
@@ -64,6 +64,6 @@
         "select_unfixed_sequence": false,
         "partial_t": 2.0
     },
-    "ckpt_path": "/cluster/scratch/malexandrov/pdh/weights/rfd3/rfd3_latest.ckpt",
+    "ckpt_path": "/cluster/scratch/clusteruser/pdh/weights/rfd3/rfd3_latest.ckpt",
     "seed": 1
 }

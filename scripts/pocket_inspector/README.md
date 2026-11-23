@@ -18,7 +18,7 @@ draws it.
 
 ## What you get
 
-One entry per rescored design, 232 of them. The viewport shows the Boltz
+One entry per rescored design, 314 of them. The viewport shows the Boltz
 prediction with the ligand in gold, the catalytic residues in red, the rest of
 the pocket within 5 Å in cyan, and **every catalytic bond as a dashed line
 labelled with its distance in angstroms**.
@@ -26,7 +26,7 @@ labelled with its distance in angstroms**.
 Those distances are measured at build time from the deposited coordinates. The
 atom pair is taken from the re-rank's own `catalytic_residues` mapping, so
 `lig_n3_to_asp229_od2=ASP232` is measured on residue 232 of that design rather
-than on a guessed position. All 671 bonds across the 232 designs resolve.
+than on a guessed position. All 877 bonds across the 314 designs resolve.
 
 Alongside the viewport:
 
@@ -34,7 +34,8 @@ Alongside the viewport:
   design shows both scores, both ranks, and how far it moved.
 - **Adjustments** — filter by how many `mutate`/`wiggle` steps are actually in
   a design's ancestry. Not the cycle number: the search re-expands the seed
-  every cycle, so 40 of the 232 have a shorter lineage than their cycle.
+  every cycle, so 60 of the 314 have a shorter lineage than their cycle — and
+  42, all from `data/final_run_60/`, have a longer one.
 - Per-bond out-of-plane offset and group angle, the five re-rank terms, the
   catalytic and site residues, and the original `design_id` and run.
 
