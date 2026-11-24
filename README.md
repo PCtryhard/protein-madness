@@ -1,5 +1,8 @@
 # Protein Madness — motif-anchored design pipeline
 
+[![tests](https://github.com/PCtryhard/protein-madness/actions/workflows/tests.yml/badge.svg)](https://github.com/PCtryhard/protein-madness/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Closed-loop protein design that improves motif-anchored designs against a fixed
 scoring function, on two 12 GB GPUs.
 
@@ -441,3 +444,36 @@ The post-challenge cleanup moved four more things in there, unchanged:
 | `outdated/cluster/aws/` | the single-machine runner, never submitted |
 | `outdated/results/smoke/` | the previous pipeline's smoke output, against the old `configs/` layout |
 | `outdated/logs/setup-perlin.log` | one env-build log, referenced by nothing |
+
+## Continuous integration
+
+[`.github/workflows/tests.yml`](.github/workflows/tests.yml) runs on every push
+to `main`, every pull request, and on demand from the Actions tab. Everything
+it does is CPU-only and needs no model weights, so a clean checkout is enough
+to reproduce it:
+
+| step | what it proves |
+| --- | --- |
+| `pytest -q` | the 283 unit tests |
+| `smoke`, `measure` | the config, the provenance chain and the geometry terms resolve |
+| `report` over `data/final_run_60/01-01-95cdcf` | a committed sqlite run store is readable, lineage query included |
+| `noise_control --from-csv` | the committed leaderboards still parse |
+| the pocket inspector build | all 314 rescored structures and the UTF-8 template load |
+| `bash -n` over every `.sh` / `.sbatch` | no cluster script is syntactically broken |
+
+It runs on **ubuntu-latest and windows-latest**. That is deliberate rather than
+thorough-for-its-own-sake: development here is Windows-first while the runs
+happened on Linux, and the two disagree about the default text encoding — which
+is how `build_inspector.py` came to crash on Windows while working fine on
+Euler. The inspector step is the guard against that recurring.
+
+Not in CI, because both fail by design and would make a red badge meaningless:
+`cluster/preflight.py` (no GPU or model stacks on a runner) and
+`scripts/build_targets.py --check` (it refuses to guess between the seed
+candidates in `data/0N/inputs/`, as described above).
+
+## License
+
+[MIT](LICENSE). The structures, leaderboards and run artifacts under `data/`
+are covered by the same terms; `data/5FQJ.cif` and `data/6SS1.cif` are
+PDB entries and carry the PDB's own terms, not ours.
