@@ -14,9 +14,23 @@ score stops improving.
 ## Status: the challenge is over
 
 **This repo is an archive.** The competition has closed and the **final 20
-designs were chosen by hand** from the scored designs, not by a ranking
-script — so no file here is "the submission". The selection was deliberately
-left out of the repo.
+designs were chosen by hand** from the scored designs, not by a ranking script.
+They are committed as sequences:
+
+| file | |
+| --- | --- |
+| `data/designs.fasta` | the final 20 |
+| `data/2kELO_10designs_submission.fa` | the 10-design submission |
+| `data/2kELO_5designs_submission.fa` | the 5-design submission |
+
+Each header carries the design's name and its `base`/`oxy` residue positions,
+and the name is the one used throughout `data/rescored/` — so all 20 resolve
+through `manifest.csv` back to a run, a lineage and a structure.
+
+That they were picked by hand is visible in the picks: the 20 take the geometry
+re-rank's **top three** but then spread to **ranks 1 through 92 across seven
+variants** (01, 02, 03, 06, 08, 09, 12), rather than taking the top 20 by
+score. Diversity was chosen over rank.
 
 What is still worth having:
 
