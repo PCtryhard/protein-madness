@@ -165,6 +165,21 @@ metric whose inputs are missing raises; it is never 0.0 and never NaN-with-a-shr
 
 ## Setup
 
+> **Cloning on Windows: turn on long paths first.**
+>
+> ```powershell
+> git config --global core.longpaths true
+> ```
+>
+> Boltz repeats each design's name three times inside its own output path, so
+> the longest committed artifact is **276 characters** before any prefix and
+> **1,719 tracked paths** exceed Windows' 260-character `MAX_PATH`. Without
+> this, `git clone` aborts partway with `Filename too long` and leaves an
+> incomplete tree. This is not hypothetical — it is how the first Windows CI
+> run failed. Existing clones that already work have it set in `.git/config`,
+> which is not committed, so a fresh clone needs it again. Linux and macOS are
+> unaffected.
+
 The virtual environment is not in the repo and never will be: `.venv/` is
 gitignored because it is machine-specific and hundreds of megabytes.
 

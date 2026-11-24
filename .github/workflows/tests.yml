@@ -29,6 +29,18 @@ jobs:
         os: [ubuntu-latest, windows-latest]
 
     steps:
+      # Boltz names its output directory after the design and then repeats that
+      # name twice more inside it. The longest committed artifact is 276
+      # characters of relative path on its own -- already past Windows'
+      # 260-character MAX_PATH before the runner's 37-character workspace
+      # prefix -- and 1,719 tracked paths are over the limit. Git aborts the
+      # checkout with "Filename too long" unless told to use the long-path API.
+      # Must come before actions/checkout. Nothing the steps below open is
+      # anywhere near the limit; this is purely about materialising the tree.
+      - name: Allow long paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
