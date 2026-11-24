@@ -1,0 +1,95 @@
+name: tests
+
+# The whole suite is CPU-only and needs no model weights, so anyone can run it
+# on a clean checkout. The GPU stacks (RFdiffusion, LigandMPNN, Boltz-2) pin
+# incompatible torch builds and live on the cluster -- nothing here touches
+# them, and nothing here needs a GPU.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch supersedes an in-flight run.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Both, deliberately. Local development here is Windows-first while the
+    # runs happened on Linux, and the two disagree about the default text
+    # encoding -- which is exactly how build_inspector.py came to crash on
+    # Windows while working fine on Euler.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      # Boltz names its output directory after the design and then repeats that
+      # name twice more inside it. The longest committed artifact is 276
+      # characters of relative path on its own -- already past Windows'
+      # 260-character MAX_PATH before the runner's 37-character workspace
+      # prefix -- and 1,719 tracked paths are over the limit. Git aborts the
+      # checkout with "Filename too long" unless told to use the long-path API.
+      # Must come before actions/checkout. Nothing the steps below open is
+      # anywhere near the limit; this is purely about materialising the tree.
+      - name: Allow long paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # env/requirements.txt is resolved and tested on 3.12.
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: env/requirements.txt
+
+      - name: Install CPU dependencies
+        run: python -m pip install --upgrade pip -r env/requirements.txt
+
+      - name: Unit tests
+        run: python -m pytest -q
+
+      # The three no-GPU CLI subcommands, run as a reviewer would.
+      - name: CLI smoke
+        run: python -m src.cli smoke --target config/targets/01_his_asp.yaml
+
+      - name: CLI measure
+        run: >
+          python -m src.cli measure
+          --target config/targets/01_his_asp.yaml
+          --pdb data/01/inputs/01_his_asp_.pdb.pre-boltz
+
+      # Reads a committed sqlite run store, including its recursive lineage
+      # query, so a corrupted or unreadable store fails here.
+      - name: CLI report over a committed run store
+        run: python -m src.cli report --run data/final_run_60/01-01-95cdcf
+
+      - name: Noise control over the committed CSVs
+        run: python scripts/noise_control.py --from-csv
+
+      # Builds the 3D viewer from the 314 committed structures. This is the
+      # regression guard for the encoding bug: it reads a UTF-8 template and
+      # 314 .cif files, which is what fell over under Windows cp1252.
+      - name: Build the pocket inspector
+        run: python scripts/pocket_inspector/build_inspector.py
+
+  # Catches a shell script that will not parse before anyone queues a job with
+  # it. Nothing is executed; the cluster scripts need Slurm and real weights.
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax-check every shell script
+        run: |
+          status=0
+          while IFS= read -r f; do
+            bash -n "$f" || { echo "SYNTAX FAIL $f"; status=1; }
+          done < <(git ls-files '*.sh' '*.sbatch')
+          exit $status
